@@ -8,7 +8,6 @@ export interface ThemeConfig {
   accentHex: string;        // hex for UI accent
   accentRgb: string;        // "r, g, b" for rgba() usage
   label: string;
-  emoji: string;
 }
 
 export const THEMES: Record<ThemeName, ThemeConfig> = {
@@ -20,7 +19,6 @@ export const THEMES: Record<ThemeName, ThemeConfig> = {
     accentHex: '#00ff88',
     accentRgb: '0, 255, 136',
     label: 'Neon',
-    emoji: '⚡',
   },
   aurora: {
     bgColor: '#06060f',
@@ -30,7 +28,6 @@ export const THEMES: Record<ThemeName, ThemeConfig> = {
     accentHex: '#bf5fff',
     accentRgb: '191, 95, 255',
     label: 'Aurora',
-    emoji: '🌌',
   },
   fire: {
     bgColor: '#0f0806',
@@ -40,7 +37,6 @@ export const THEMES: Record<ThemeName, ThemeConfig> = {
     accentHex: '#ff6030',
     accentRgb: '255, 96, 48',
     label: 'Fire',
-    emoji: '🔥',
   },
   ice: {
     bgColor: '#060c0f',
@@ -50,7 +46,6 @@ export const THEMES: Record<ThemeName, ThemeConfig> = {
     accentHex: '#60d0ff',
     accentRgb: '96, 208, 255',
     label: 'Ice',
-    emoji: '❄️',
   },
 };
 

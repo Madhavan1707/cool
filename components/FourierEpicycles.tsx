@@ -37,16 +37,8 @@ interface AnimState {
   paused: boolean;
   particles: Particle[];
   theme: ThemeName;
-  burstPending: boolean;
   activePreset: PresetName | null;
 }
-
-const PRESETS: { name: PresetName; label: string; emoji: string }[] = [
-  { name: 'heart',    label: 'Heart',    emoji: '♥' },
-  { name: 'star',     label: 'Star',     emoji: '★' },
-  { name: 'infinity', label: 'Infinity', emoji: '∞' },
-  { name: 'clover',   label: 'Clover',   emoji: '☘' },
-];
 
 export default function FourierEpicycles() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -66,7 +58,6 @@ export default function FourierEpicycles() {
     paused: false,
     particles: [],
     theme: 'neon',
-    burstPending: false,
     activePreset: null,
   });
 
