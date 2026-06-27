@@ -118,7 +118,7 @@ Single horizontal glassmorphism pill at bottom-center:
 ### Keyboard Hint Bar
 - Appears below the pill on first load.
 - Content: `Space pause · R reset · 1-4 presets · T theme · ↑↓ speed`
-- Fades out after 4s via CSS opacity transition. Never shown again (sessionStorage flag).
+- Fades out after 4s via CSS opacity transition. Never shown again in the session — flag stored as `sessionStorage.setItem('fourier-hints-seen', '1')`.
 
 ### Header
 - Title "Fourier Epicycles": CSS shimmer animation — `background: linear-gradient(90deg, white, accent, white)` with `background-size: 200%` and `@keyframes shimmer { to { background-position: -200% } }` at 3s loop.
@@ -129,10 +129,10 @@ Single horizontal glassmorphism pill at bottom-center:
   - Animate mode paused: "paused — press Space to resume"
 
 ### Progress Arc
-- Thin SVG arc overlaid on the Animate button (or as a border).
+- Absolutely-positioned SVG ring (40×40px) centered over the Animate button. The button is `relative`; the SVG is `absolute inset-0`.
 - Traces from 0° to 360° as `time` goes 0 → 2π. Resets each cycle.
 - Stroke color = theme accent at 60% opacity, stroke-width 2px.
-- Rendered as an absolutely-positioned SVG `<circle>` with `stroke-dasharray` and animated `stroke-dashoffset`.
+- Implemented via `stroke-dasharray="circumference circumference"` and `stroke-dashoffset` driven by a React state value updated every animation frame via a callback ref.
 
 ---
 
