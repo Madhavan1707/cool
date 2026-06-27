@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { computeDFT, resample, type Epicycle } from '@/lib/dft';
 import { generatePreset, type PresetName } from '@/lib/presets';
 import { getTheme, nextTheme, type ThemeName } from '@/lib/themes';
+import ControlBar from '@/components/ControlBar';
 
 const DRAW_COLOR = 'rgba(255, 255, 255, 0.65)';
 const SAMPLE_N = 256;
@@ -477,18 +478,30 @@ export default function FourierEpicycles() {
     };
   }, []);
 
-  // ── Derived state ────────────────────────────────────────────────────────────
-
   const isAnimating = mode === 'animate';
+  const th = getTheme(theme);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // Contextual sub-text
+  const subText = (() => {
+    if (!isAnimating && !canAnimate) return 'pick a preset or draw a shape';
+    if (!isAnimating && canAnimate) return 'shape ready — click Animate';
+    if (isAnimating && paused) return 'paused — press Space to resume';
+    return `${Math.min(numCircles, 256)} circles · ${th.label}`;
+  })();
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden select-none" style={{ background: getTheme(theme).bgColor }}>
+    <div
+      className="relative w-screen h-screen overflow-hidden select-none"
+      style={{ background: th.bgColor }}
+    >
+      {/* Canvas */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 touch-none transition-opacity duration-500"
-        style={{ cursor: mode === 'draw' ? 'crosshair' : 'default', opacity: canvasVisible ? 1 : 0 }}
+        style={{
+          cursor: mode === 'draw' ? 'crosshair' : 'default',
+          opacity: canvasVisible ? 1 : 0,
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -497,113 +510,37 @@ export default function FourierEpicycles() {
 
       {/* Header */}
       <div className="absolute top-7 left-8 pointer-events-none">
-        <h1 className="text-white text-2xl font-semibold tracking-tight">
+        <h1
+          className="shimmer-text text-2xl font-semibold tracking-tight"
+          style={{ '--accent-color': th.accentHex } as React.CSSProperties}
+        >
           Fourier Epicycles
         </h1>
-        <p className="text-white/35 text-sm mt-1">
-          {isAnimating
-            ? paused ? 'Paused — press Space to resume' : 'Spinning circles reconstruct your drawing'
-            : 'Draw a shape on the canvas, then click Animate'}
+        <p className="text-white/35 text-sm mt-1 transition-all duration-300">
+          {subText}
         </p>
       </div>
 
-      {/* Keyboard hints overlay */}
-      {showHints && (
-        <div className="absolute top-7 right-8 pointer-events-none text-right text-xs text-white/40 space-y-1 leading-relaxed">
-          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">Space</kbd> pause / resume</div>
-          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">R</kbd> draw mode</div>
-          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">1–4</kbd> load preset</div>
-          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">T</kbd> cycle theme</div>
-          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">↑↓</kbd> speed</div>
-        </div>
-      )}
-
-      {/* Controls */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4">
-        {/* Presets */}
-        <div className="flex gap-2">
-          {PRESETS.map(({ name, label }) => (
-            <button
-              key={name}
-              onClick={() => loadPreset(name)}
-              className={`px-4 py-1.5 text-xs font-medium rounded-full border backdrop-blur-sm bg-white/[0.04] transition-all ${
-                activePreset === name
-                  ? 'border-white/50 text-white/90'
-                  : 'border-white/15 text-white/60 hover:border-white/50 hover:text-white/90'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Main buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={startDraw}
-            className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all ${
-              !isAnimating
-                ? 'bg-white text-black'
-                : 'border border-white/25 text-white/70 hover:border-white/50 hover:text-white backdrop-blur-sm bg-white/[0.04]'
-            }`}
-          >
-            Draw
-          </button>
-          {isAnimating && (
-            <button
-              onClick={togglePause}
-              className="px-6 py-2.5 rounded-full text-sm font-medium transition-all border border-white/25 text-white/70 hover:border-white/50 hover:text-white backdrop-blur-sm bg-white/[0.04]"
-            >
-              {paused ? 'Resume' : 'Pause'}
-            </button>
-          )}
-          <button
-            onClick={startAnimate}
-            disabled={!canAnimate && !isAnimating}
-            className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all ${
-              isAnimating
-                ? 'bg-emerald-400 text-black'
-                : canAnimate
-                ? `border border-emerald-400/50 text-emerald-400 hover:bg-emerald-400/10 backdrop-blur-sm bg-white/[0.04]${animatePulse ? ' pulse-glow' : ''}`
-                : 'border border-white/10 text-white/25 cursor-not-allowed backdrop-blur-sm'
-            }`}
-          >
-            Animate
-          </button>
-        </div>
-
-        {/* Sliders */}
-        <div className="flex gap-8 text-xs text-white/40">
-          <label className="flex flex-col items-center gap-1.5">
-            <span>Speed&nbsp;{speed.toFixed(1)}×</span>
-            <input
-              type="range"
-              min="0.1"
-              max="5"
-              step="0.1"
-              value={speed}
-              onChange={e => setSpeed(parseFloat(e.target.value))}
-              className="w-28 accent-emerald-400"
-            />
-          </label>
-          <label className="flex flex-col items-center gap-1.5">
-            <span>Circles&nbsp;{numCircles}</span>
-            <input
-              type="range"
-              min="1"
-              max={SAMPLE_N}
-              step="1"
-              value={numCircles}
-              onChange={e => {
-                const v = parseInt(e.target.value);
-                setNumCircles(v);
-                s.current.numCircles = v;
-              }}
-              className="w-28 accent-emerald-400"
-            />
-          </label>
-        </div>
-      </div>
+      {/* Control bar */}
+      <ControlBar
+        mode={mode}
+        paused={paused}
+        canAnimate={canAnimate}
+        speed={speed}
+        numCircles={numCircles}
+        activePreset={activePreset}
+        theme={theme}
+        animatePulse={animatePulse}
+        showHints={showHints}
+        arcCircleRef={arcCircleRef}
+        onDraw={startDraw}
+        onAnimate={startAnimate}
+        onPause={togglePause}
+        onPreset={loadPreset}
+        onSpeedChange={v => { setSpeed(v); s.current.speed = v; }}
+        onCirclesChange={v => { setNumCircles(v); s.current.numCircles = v; }}
+        onTheme={t => { setTheme(t); s.current.theme = t; }}
+      />
     </div>
   );
 }
