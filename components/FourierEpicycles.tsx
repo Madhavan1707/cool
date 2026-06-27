@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { computeDFT, resample, type Epicycle } from '@/lib/dft';
 import { generatePreset, type PresetName } from '@/lib/presets';
 import { getTheme, nextTheme, type ThemeName } from '@/lib/themes';
@@ -215,13 +215,12 @@ export default function FourierEpicycles() {
           e.preventDefault();
           setSpeed(prev => Math.max(0.1, Math.round((prev - 0.5) * 10) / 10));
           break;
-        case 'KeyT':
-          setTheme(prev => {
-            const next = nextTheme(prev);
-            s.current.theme = next;
-            return next;
-          });
+        case 'KeyT': {
+          const next = nextTheme(s.current.theme);
+          s.current.theme = next;
+          setTheme(next);
           break;
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -231,17 +230,21 @@ export default function FourierEpicycles() {
   // Auto-play heart on mount + show keyboard hints
   useEffect(() => {
     const already = sessionStorage.getItem('fourier-hints-seen');
+    let hintsTimer: ReturnType<typeof setTimeout> | null = null;
     if (!already) {
       setShowHints(true);
       sessionStorage.setItem('fourier-hints-seen', '1');
-      setTimeout(() => setShowHints(false), 4000);
+      hintsTimer = setTimeout(() => setShowHints(false), 4000);
     }
     const t = setTimeout(() => {
       actionsRef.current.loadPreset('heart');
       setCanvasVisible(true);
     }, 600);
     setCanvasVisible(true);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      if (hintsTimer !== null) clearTimeout(hintsTimer);
+    };
   }, []);
 
   // ── Canvas RAF loop ──────────────────────────────────────────────────────────
@@ -512,7 +515,7 @@ export default function FourierEpicycles() {
       <div className="absolute top-7 left-8 pointer-events-none">
         <h1
           className="shimmer-text text-2xl font-semibold tracking-tight"
-          style={{ '--accent-color': th.accentHex } as React.CSSProperties}
+          style={{ '--accent-color': th.accentHex } as CSSProperties}
         >
           Fourier Epicycles
         </h1>

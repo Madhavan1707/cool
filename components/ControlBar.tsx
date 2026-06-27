@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject } from 'react';
+import { type RefObject, type CSSProperties } from 'react';
 import { type PresetName } from '@/lib/presets';
 import { type ThemeName, THEMES, THEME_ORDER } from '@/lib/themes';
 
@@ -179,7 +179,7 @@ export default function ControlBar({
                 border: `1px solid ${isAnimating ? accent : canAnimate ? accent + '80' : 'rgba(255,255,255,0.08)'}`,
                 cursor: !canAnimate && !isAnimating ? 'not-allowed' : 'pointer',
                 '--accent-rgb': th.accentRgb,
-              } as React.CSSProperties}
+              } as CSSProperties}
             >
               <PlayIcon />
               Animate
@@ -218,7 +218,7 @@ export default function ControlBar({
             <span>Circles&nbsp;{numCircles}</span>
             <input
               type="range" min="1" max={256} step="1" value={numCircles}
-              onChange={e => onCirclesChange(parseInt(e.target.value))}
+              onChange={e => onCirclesChange(parseInt(e.target.value, 10))}
               className="w-28"
               style={{ accentColor: accent }}
             />
