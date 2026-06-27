@@ -81,10 +81,169 @@ export default function FourierEpicycles() {
   const [showHints, setShowHints] = useState(false);
   const arcCircleRef = useRef<SVGCircleElement>(null);
 
+  // Sync effects — keep mutable ref in sync with React state
   useEffect(() => { s.current.speed = speed; }, [speed]);
   useEffect(() => { s.current.numCircles = numCircles; }, [numCircles]);
   useEffect(() => { s.current.paused = paused; }, [paused]);
   useEffect(() => { s.current.theme = theme; }, [theme]);
+
+  // ── Pointer helpers ──────────────────────────────────────────────────────────
+
+  const getPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (s.current.mode !== 'draw') return;
+    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+    s.current.isDown = true;
+    s.current.rawPoints = [getPoint(e)];
+    setCanAnimate(false);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!s.current.isDown || s.current.mode !== 'draw') return;
+    s.current.rawPoints.push(getPoint(e));
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    if (!s.current.isDown) return;
+    s.current.isDown = false;
+    if (s.current.rawPoints.length > 5) {
+      setCanAnimate(true);
+      setAnimatePulse(true);
+      setTimeout(() => setAnimatePulse(false), 2000);
+    }
+  }, []);
+
+  // ── Mode callbacks ───────────────────────────────────────────────────────────
+
+  const startAnimate = useCallback(() => {
+    if (s.current.rawPoints.length < 5) return;
+    const cx = s.current.cx;
+    const cy = s.current.cy;
+    const sampled = resample(s.current.rawPoints, SAMPLE_N);
+    const centered = sampled.map(p => ({ x: p.x - cx, y: p.y - cy }));
+    s.current.centeredSampled = centered;
+    s.current.epicycles = computeDFT(centered);
+    s.current.tracedPath = [];
+    s.current.time = 0;
+    s.current.numCircles = numCircles;
+    s.current.paused = false;
+    s.current.mode = 'animate';
+    setPaused(false);
+    setMode('animate');
+    setAnimatePulse(false);
+  }, [numCircles]);
+
+  const startDraw = useCallback(() => {
+    s.current.mode = 'draw';
+    s.current.rawPoints = [];
+    s.current.epicycles = [];
+    s.current.tracedPath = [];
+    s.current.centeredSampled = [];
+    s.current.particles = [];
+    s.current.time = 0;
+    s.current.paused = false;
+    s.current.activePreset = null;
+    setMode('draw');
+    setPaused(false);
+    setCanAnimate(false);
+    setActivePreset(null);
+    setAnimatePulse(false);
+  }, []);
+
+  const loadPreset = useCallback((name: PresetName) => {
+    const scale = Math.min(window.innerWidth, window.innerHeight) * 0.32;
+    const cx = s.current.cx;
+    const cy = s.current.cy;
+    const raw = generatePreset(name, cx, cy, scale);
+    const sampled = resample(raw, SAMPLE_N);
+    const centered = sampled.map(p => ({ x: p.x - cx, y: p.y - cy }));
+    s.current.rawPoints = raw;
+    s.current.centeredSampled = centered;
+    s.current.epicycles = computeDFT(centered);
+    s.current.tracedPath = [];
+    s.current.particles = [];
+    s.current.time = 0;
+    s.current.numCircles = numCircles;
+    s.current.paused = false;
+    s.current.activePreset = name;
+    s.current.mode = 'animate';
+    setMode('animate');
+    setPaused(false);
+    setCanAnimate(true);
+    setActivePreset(name);
+    setAnimatePulse(false);
+  }, [numCircles]);
+
+  const togglePause = useCallback(() => {
+    const next = !s.current.paused;
+    s.current.paused = next;
+    setPaused(next);
+  }, []);
+
+  // ── Keyboard shortcuts + auto-play effects ───────────────────────────────────
+
+  // Stable ref so keyboard handler never goes stale
+  const actionsRef = useRef({ loadPreset, startDraw, togglePause });
+  useEffect(() => { actionsRef.current = { loadPreset, startDraw, togglePause }; },
+    [loadPreset, startDraw, togglePause]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const { loadPreset, startDraw, togglePause } = actionsRef.current;
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          if (s.current.mode === 'animate') togglePause();
+          break;
+        case 'KeyR': startDraw(); break;
+        case 'Digit1': loadPreset('heart'); break;
+        case 'Digit2': loadPreset('star'); break;
+        case 'Digit3': loadPreset('infinity'); break;
+        case 'Digit4': loadPreset('clover'); break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setSpeed(prev => Math.min(5, Math.round((prev + 0.5) * 10) / 10));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setSpeed(prev => Math.max(0.1, Math.round((prev - 0.5) * 10) / 10));
+          break;
+        case 'KeyT':
+          setTheme(prev => {
+            const next = nextTheme(prev);
+            s.current.theme = next;
+            return next;
+          });
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Auto-play heart on mount + show keyboard hints
+  useEffect(() => {
+    const already = sessionStorage.getItem('fourier-hints-seen');
+    if (!already) {
+      setShowHints(true);
+      sessionStorage.setItem('fourier-hints-seen', '1');
+      setTimeout(() => setShowHints(false), 4000);
+    }
+    const t = setTimeout(() => {
+      actionsRef.current.loadPreset('heart');
+      setCanvasVisible(true);
+    }, 600);
+    setCanvasVisible(true);
+    return () => clearTimeout(t);
+  }, []);
+
+  // ── Canvas RAF loop ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -318,85 +477,18 @@ export default function FourierEpicycles() {
     };
   }, []);
 
-  const getPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (s.current.mode !== 'draw') return;
-    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
-    s.current.isDown = true;
-    s.current.rawPoints = [getPoint(e)];
-    setCanAnimate(false);
-  }, []);
-
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!s.current.isDown || s.current.mode !== 'draw') return;
-    s.current.rawPoints.push(getPoint(e));
-  }, []);
-
-  const onPointerUp = useCallback(() => {
-    if (!s.current.isDown) return;
-    s.current.isDown = false;
-    if (s.current.rawPoints.length > 5) setCanAnimate(true);
-  }, []);
-
-  const startAnimate = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || s.current.rawPoints.length < 5) return;
-    const cx = s.current.cx;
-    const cy = s.current.cy;
-    const sampled = resample(s.current.rawPoints, SAMPLE_N);
-    const centered = sampled.map(p => ({ x: p.x - cx, y: p.y - cy }));
-    s.current.centeredSampled = centered;
-    s.current.epicycles = computeDFT(centered);
-    s.current.tracedPath = [];
-    s.current.time = 0;
-    s.current.numCircles = numCircles;
-    s.current.mode = 'animate';
-    setMode('animate');
-  }, [numCircles]);
-
-  const startDraw = useCallback(() => {
-    s.current.mode = 'draw';
-    s.current.rawPoints = [];
-    s.current.epicycles = [];
-    s.current.tracedPath = [];
-    s.current.centeredSampled = [];
-    s.current.time = 0;
-    setMode('draw');
-    setCanAnimate(false);
-  }, []);
-
-  const loadPreset = useCallback((name: PresetName) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const scale = Math.min(window.innerWidth, window.innerHeight) * 0.32;
-    const cx = s.current.cx;
-    const cy = s.current.cy;
-    const raw = generatePreset(name, cx, cy, scale);
-    const sampled = resample(raw, SAMPLE_N);
-    const centered = sampled.map(p => ({ x: p.x - cx, y: p.y - cy }));
-    s.current.rawPoints = raw;
-    s.current.centeredSampled = centered;
-    s.current.epicycles = computeDFT(centered);
-    s.current.tracedPath = [];
-    s.current.time = 0;
-    s.current.numCircles = numCircles;
-    s.current.mode = 'animate';
-    setMode('animate');
-    setCanAnimate(true);
-  }, [numCircles]);
+  // ── Derived state ────────────────────────────────────────────────────────────
 
   const isAnimating = mode === 'animate';
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none" style={{ background: getTheme(theme).bgColor }}>
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 touch-none"
-        style={{ cursor: mode === 'draw' ? 'crosshair' : 'default' }}
+        className="absolute inset-0 touch-none transition-opacity duration-500"
+        style={{ cursor: mode === 'draw' ? 'crosshair' : 'default', opacity: canvasVisible ? 1 : 0 }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -410,10 +502,21 @@ export default function FourierEpicycles() {
         </h1>
         <p className="text-white/35 text-sm mt-1">
           {isAnimating
-            ? 'Spinning circles reconstruct your drawing'
+            ? paused ? 'Paused — press Space to resume' : 'Spinning circles reconstruct your drawing'
             : 'Draw a shape on the canvas, then click Animate'}
         </p>
       </div>
+
+      {/* Keyboard hints overlay */}
+      {showHints && (
+        <div className="absolute top-7 right-8 pointer-events-none text-right text-xs text-white/40 space-y-1 leading-relaxed">
+          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">Space</kbd> pause / resume</div>
+          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">R</kbd> draw mode</div>
+          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">1–4</kbd> load preset</div>
+          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">T</kbd> cycle theme</div>
+          <div><kbd className="px-1 py-0.5 rounded bg-white/10 text-white/60 font-mono">↑↓</kbd> speed</div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4">
@@ -423,7 +526,11 @@ export default function FourierEpicycles() {
             <button
               key={name}
               onClick={() => loadPreset(name)}
-              className="px-4 py-1.5 text-xs font-medium text-white/60 rounded-full border border-white/15 hover:border-white/50 hover:text-white/90 backdrop-blur-sm bg-white/[0.04] transition-all"
+              className={`px-4 py-1.5 text-xs font-medium rounded-full border backdrop-blur-sm bg-white/[0.04] transition-all ${
+                activePreset === name
+                  ? 'border-white/50 text-white/90'
+                  : 'border-white/15 text-white/60 hover:border-white/50 hover:text-white/90'
+              }`}
             >
               {label}
             </button>
@@ -442,6 +549,14 @@ export default function FourierEpicycles() {
           >
             Draw
           </button>
+          {isAnimating && (
+            <button
+              onClick={togglePause}
+              className="px-6 py-2.5 rounded-full text-sm font-medium transition-all border border-white/25 text-white/70 hover:border-white/50 hover:text-white backdrop-blur-sm bg-white/[0.04]"
+            >
+              {paused ? 'Resume' : 'Pause'}
+            </button>
+          )}
           <button
             onClick={startAnimate}
             disabled={!canAnimate && !isAnimating}
@@ -449,7 +564,7 @@ export default function FourierEpicycles() {
               isAnimating
                 ? 'bg-emerald-400 text-black'
                 : canAnimate
-                ? 'border border-emerald-400/50 text-emerald-400 hover:bg-emerald-400/10 backdrop-blur-sm bg-white/[0.04]'
+                ? `border border-emerald-400/50 text-emerald-400 hover:bg-emerald-400/10 backdrop-blur-sm bg-white/[0.04]${animatePulse ? ' pulse-glow' : ''}`
                 : 'border border-white/10 text-white/25 cursor-not-allowed backdrop-blur-sm'
             }`}
           >
