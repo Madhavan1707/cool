@@ -88,7 +88,7 @@ generating, and worth sharing — in three independently shippable waves.
     immediately.
 11. **Blend mode (compare)** — a "Blend" button in compare mode when both
     shapes exist: both particle sets fly into one shared canvas and interleave
-    into a combined shape seeded from `textToPersonPattern(a + "" + b)`.
+    into a combined shape seeded from `textToPersonPattern(a + " " + b)`.
     Shareable automatically (derived from existing a/b params — no new URL
     state beyond a `view=blend` flag if needed).
 12. **Compatibility meter** — deterministic hash of both names → playful
