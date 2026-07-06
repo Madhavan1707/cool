@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ParticleCanvas from "@/components/ParticleCanvas";
 import {
   PALETTES,
@@ -45,6 +45,41 @@ function CompareIcon({ className }: { className?: string }) {
   );
 }
 
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fffaf2]";
 
@@ -75,21 +110,33 @@ function useResponsiveSize(preferred: number): number {
 function PersonFractal({
   placeholder,
   palette,
+  committed,
+  onCommit,
   size = 560,
 }: {
   placeholder: string;
   palette: PaletteId;
+  committed: string | null;
+  onCommit: (value: string) => void;
   size?: number;
 }) {
-  const [text, setText] = useState("");
-  const [pattern, setPattern] = useState<PersonPattern | null>(null);
-  const [committedText, setCommittedText] = useState<string | null>(null);
+  const [text, setText] = useState(committed ?? "");
   const responsiveSize = useResponsiveSize(size);
 
+  const pattern = useMemo<PersonPattern | null>(
+    () => (committed ? textToPersonPattern(committed) : null),
+    [committed]
+  );
+
+  // Keep the input in step when the committed text arrives from outside the
+  // component — restored from the URL on load, or remembered across a
+  // single/compare mode switch.
+  useEffect(() => {
+    if (committed !== null) setText(committed);
+  }, [committed]);
+
   function handleGenerate() {
-    const value = text.trim() || "anonymous";
-    setPattern(textToPersonPattern(value));
-    setCommittedText(value);
+    onCommit(text.trim() || "anonymous");
   }
 
   return (
@@ -113,9 +160,9 @@ function PersonFractal({
         </button>
       </div>
 
-      {committedText && pattern && (
+      {committed && pattern && (
         <p className="text-sm text-stone-600 text-center max-w-xs">
-          &ldquo;{committedText}&rdquo; &mdash; scatter it with your cursor, it finds its way back
+          &ldquo;{committed}&rdquo; &mdash; scatter it with your cursor, it finds its way back
         </p>
       )}
 
@@ -124,7 +171,7 @@ function PersonFractal({
           pattern={pattern}
           palette={palette}
           size={responsiveSize}
-          label={`A one-of-a-kind particle shape generated from "${committedText}"`}
+          label={`A one-of-a-kind particle shape generated from "${committed}"`}
         />
       ) : (
         <div
@@ -139,9 +186,119 @@ function PersonFractal({
   );
 }
 
+const COPIED_FEEDBACK_MS = 2000;
+
+function ShareLinkButton() {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      // Clipboard API can be unavailable (e.g. insecure context); fall back
+      // to the legacy selection-based copy.
+      const textarea = document.createElement("textarea");
+      textarea.value = window.location.href;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopied(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-stone-300 shadow-sm hover:border-stone-400 active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-stone-700 ${FOCUS_RING}`}
+    >
+      {copied ? (
+        <>
+          <CheckIcon className="w-4 h-4 text-green-600" />
+          Link copied
+        </>
+      ) : (
+        <>
+          <LinkIcon className="w-4 h-4" />
+          Copy shareable link
+        </>
+      )}
+    </button>
+  );
+}
+
+const DEFAULT_PALETTE: PaletteId = "sunrise";
+
+/** Query-param names for shareable URLs: a/b = the two texts, m = mode, p = palette. */
+function buildShareQuery(
+  mode: Mode,
+  palette: PaletteId,
+  committedA: string | null,
+  committedB: string | null
+): string {
+  const params = new URLSearchParams();
+  if (committedA) params.set("a", committedA);
+  if (mode === "compare") {
+    params.set("m", "compare");
+    if (committedB) params.set("b", committedB);
+  }
+  if (palette !== DEFAULT_PALETTE) params.set("p", palette);
+  return params.toString();
+}
+
 export default function Home() {
   const [mode, setMode] = useState<Mode>("single");
   const [palette, setPalette] = useState<PaletteId>("sunrise");
+  const [committedA, setCommittedA] = useState<string | null>(null);
+  const [committedB, setCommittedB] = useState<string | null>(null);
+  const urlSyncedOnceRef = useRef(false);
+
+  // Restore state from the URL after mount. The page is statically
+  // prerendered with default state, so reading location in an effect (rather
+  // than in the initial render) avoids a hydration mismatch.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get("p");
+    if (p && p in PALETTES) setPalette(p as PaletteId);
+    const a = params.get("a");
+    if (a) setCommittedA(a.slice(0, 64));
+    const b = params.get("b");
+    if (b) setCommittedB(b.slice(0, 64));
+    if (params.get("m") === "compare" || b) setMode("compare");
+  }, []);
+
+  // Mirror state into the URL so the address bar is always shareable.
+  // replaceState (not pushState) so browsing history isn't spammed; Next.js
+  // integrates native history calls with its router.
+  useEffect(() => {
+    // The first run happens in the same commit as the restore effect above,
+    // before restored state has rendered — writing now would erase the very
+    // params being restored.
+    if (!urlSyncedOnceRef.current) {
+      urlSyncedOnceRef.current = true;
+      return;
+    }
+    const query = buildShareQuery(mode, palette, committedA, committedB);
+    window.history.replaceState(
+      null,
+      "",
+      query ? `?${query}` : window.location.pathname
+    );
+  }, [mode, palette, committedA, committedB]);
+
+  const hasPattern =
+    mode === "single" ? committedA !== null : committedA !== null || committedB !== null;
 
   return (
     <main
@@ -229,21 +386,32 @@ export default function Home() {
       </div>
 
       {mode === "single" ? (
-        <PersonFractal placeholder="your name, a memory, a birthday..." palette={palette} />
+        <PersonFractal
+          placeholder="your name, a memory, a birthday..."
+          palette={palette}
+          committed={committedA}
+          onCommit={setCommittedA}
+        />
       ) : (
         <div className="flex flex-col md:flex-row gap-10 items-start justify-center">
           <PersonFractal
             placeholder="first person's name..."
             palette={palette}
+            committed={committedA}
+            onCommit={setCommittedA}
             size={400}
           />
           <PersonFractal
             placeholder="second person's name..."
             palette={palette}
+            committed={committedB}
+            onCommit={setCommittedB}
             size={400}
           />
         </div>
       )}
+
+      {hasPattern && <ShareLinkButton />}
     </main>
   );
 }
