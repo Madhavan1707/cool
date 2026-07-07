@@ -138,6 +138,13 @@ each wave.
 - [x] Deployed to Vercel, GitHub auto-deploy wired (`main` → production)
 - [x] Shareable URLs + copy-link button (commit 3be32a4)
 - [x] Domain fractalsofyou.vercel.app claimed and serving
-- [ ] Wave 1 (items 1–6) — next up; start with touch support (item 1)
+- [x] Wave 1 (items 1–6) — shipped 2026-07-07: pointer/touch events, hold-to-attract
+  vortex + fling, double-tap supernova, ambient word-demo empty state with
+  pattern morphing, WORLD_THEMES palette-matched page (neon additive glow),
+  copy trims + in-canvas fading hints. Verified: tsc, prod build, browser
+  (all four palettes, burst/vortex/fling/supernova, compare-mode URL
+  round-trip, narrow viewport, no horizontal overflow).
+  Note for future verification: rAF freezes when the Chrome window is
+  occluded — bring the window to the foreground before judging animation.
 - [ ] Wave 2 (items 7–9)
 - [ ] Wave 3 (items 10–13)

@@ -224,8 +224,13 @@ export default function ParticleCanvas({
 
   function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     // Capture so a finger/cursor dragged off the canvas keeps steering the
-    // hold instead of leaving it stuck on.
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // hold instead of leaving it stuck on. Guarded: capture can throw for
+    // pointers the browser no longer tracks (e.g. synthetic events).
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Without capture the hold still works while the pointer stays on-canvas.
+    }
     if (!interacted) setInteracted(true);
     const pos = localPosition(e);
     pointerRef.current = pos;
