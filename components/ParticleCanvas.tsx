@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef } from "react";
 import {
   PALETTES,
   PaletteId,
@@ -9,28 +9,13 @@ import {
   paletteColor,
   shapeHomePosition,
 } from "@/lib/particles";
+import { useReducedMotion } from "@/components/useReducedMotion";
 
 interface ParticleCanvasProps {
   pattern: PersonPattern;
   palette: PaletteId;
   size?: number;
   label?: string;
-}
-
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-function subscribeReducedMotion(callback: () => void) {
-  const mql = window.matchMedia(REDUCED_MOTION_QUERY);
-  mql.addEventListener("change", callback);
-  return () => mql.removeEventListener("change", callback);
-}
-
-function getReducedMotionSnapshot() {
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
-
-function getReducedMotionServerSnapshot() {
-  return false;
 }
 
 interface Particle {
@@ -90,27 +75,28 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
   const holdRef = useRef<{ x: number; y: number; startTime: number } | null>(null);
   const lastTapRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const burstsRef = useRef<Burst[]>([]);
-  const reducedMotion = useSyncExternalStore(
-    subscribeReducedMotion,
-    getReducedMotionSnapshot,
-    getReducedMotionServerSnapshot
-  );
+  const reducedMotion = useReducedMotion();
 
-  // Particle homes and starting positions are (re)computed once per
-  // generation, in an effect (never during render, which must stay pure).
+  // Particle homes are (re)computed once per generation, in an effect (never
+  // during render, which must stay pure). Particles that already exist keep
+  // their positions and drift to the new homes, so a pattern change reads as
+  // a morph; only brand-new particles scatter in from random spots — or start
+  // at home under prefers-reduced-motion, so the shape is simply there.
   useEffect(() => {
+    const previous = particlesRef.current;
     particlesRef.current = Array.from({ length: pattern.particleCount }, (_, i) => {
       const theta = i / pattern.particleCount;
       const home = shapeHomePosition(theta, size, pattern.shape);
+      const prev = previous[i];
       return {
-        x: Math.random() * size,
-        y: Math.random() * size,
+        x: prev ? prev.x : reducedMotion ? home.x : Math.random() * size,
+        y: prev ? prev.y : reducedMotion ? home.y : Math.random() * size,
         homeX: home.x,
         homeY: home.y,
         hue: theta,
       };
     });
-  }, [pattern, size]);
+  }, [pattern, size, reducedMotion]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

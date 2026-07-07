@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ParticleCanvas from "@/components/ParticleCanvas";
+import { useReducedMotion } from "@/components/useReducedMotion";
 import {
   PALETTES,
   PALETTE_LABELS,
@@ -107,6 +108,39 @@ function useResponsiveSize(preferred: number): number {
   return size;
 }
 
+// Words the empty state drifts through before the user types anything, so
+// first paint is already alive instead of a dead placeholder box.
+const DEMO_WORDS = ["hello", "you?", "type your name…"];
+const DEMO_CYCLE_MS = 4000;
+
+function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
+  const reducedMotion = useReducedMotion();
+  const [wordIndex, setWordIndex] = useState(0);
+
+  // Under prefers-reduced-motion the demo holds its first shape instead of
+  // cycling — the morphing between words is exactly the kind of unrequested
+  // motion that setting asks us to skip.
+  useEffect(() => {
+    if (reducedMotion) return;
+    const id = setInterval(
+      () => setWordIndex((i) => (i + 1) % DEMO_WORDS.length),
+      DEMO_CYCLE_MS
+    );
+    return () => clearInterval(id);
+  }, [reducedMotion]);
+
+  const pattern = useMemo(() => textToPersonPattern(DEMO_WORDS[wordIndex]), [wordIndex]);
+
+  return (
+    <ParticleCanvas
+      pattern={pattern}
+      palette={palette}
+      size={size}
+      label="A drifting demo shape — generate your own by typing above"
+    />
+  );
+}
+
 function PersonFractal({
   placeholder,
   palette,
@@ -174,13 +208,7 @@ function PersonFractal({
           label={`A one-of-a-kind particle shape generated from "${committed}"`}
         />
       ) : (
-        <div
-          style={{ width: responsiveSize, height: responsiveSize }}
-          className="rounded-2xl bg-white/40 backdrop-blur-sm border border-stone-300 shadow-sm flex flex-col items-center justify-center gap-3 text-stone-500 text-sm text-center px-4"
-        >
-          <SparkleIcon className="w-7 h-7 text-stone-400" />
-          <span>Enter something above to generate</span>
-        </div>
+        <AmbientDemo palette={palette} size={responsiveSize} />
       )}
     </div>
   );
