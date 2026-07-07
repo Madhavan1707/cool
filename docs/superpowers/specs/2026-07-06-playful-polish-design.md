@@ -152,3 +152,7 @@ each wave.
   compatibility meter, opt-in WebAudio burst chimes (localStorage, never in
   URLs). Verified: tsc, prod build, browser (dice commit + URL sync, blend
   round-trip from fresh load, meter determinism, chime path error-free).
+  Post-ship polish (user feedback): action-matched sound design (small tap
+  pluck / rising fling whoosh / supernova noise+sub bang), labeled sound
+  toggle with enable-confirmation chime, snappier physics (stronger
+  spring/repel/bursts, shorter trails), devicePixelRatio-sharp canvas.

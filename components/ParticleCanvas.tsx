@@ -42,37 +42,37 @@ interface Burst {
   duration: number;
 }
 
-const SPRING_STRENGTH = 3.2; // per second; how eagerly particles return to their home shape
+const SPRING_STRENGTH = 4.2; // per second; how eagerly particles return to their home shape
 const JITTER_SPEED = 8;
 const REPEL_RADIUS = 220; // px; how far the cursor's push reaches
-const REPEL_STRENGTH = 1400; // px/s; velocity at the very center of the repel radius
+const REPEL_STRENGTH = 1900; // px/s; velocity at the very center of the repel radius
 
 const BURST_RADIUS = 220;
-const BURST_STRENGTH = 2200;
-const BURST_DURATION_MS = 550;
+const BURST_STRENGTH = 2800;
+const BURST_DURATION_MS = 450;
 const MAX_ACTIVE_BURSTS = 5;
 
 // Press-and-hold: after the threshold, the repel force inverts into an
 // attract-and-swirl vortex; releasing flings everything back out.
 const HOLD_THRESHOLD_MS = 150; // below this a press still counts as a tap
 const ATTRACT_RADIUS = 340;
-const ATTRACT_STRENGTH = 1100;
-const SWIRL_STRENGTH = 900; // tangential component that makes the vortex spin
+const ATTRACT_STRENGTH = 1400;
+const SWIRL_STRENGTH = 1100; // tangential component that makes the vortex spin
 
 const FLING_RADIUS = 340;
-const FLING_MIN_STRENGTH = 1600; // fling right at the hold threshold
-const FLING_MAX_STRENGTH = 3600; // fling after a full FLING_MAX_HOLD_MS hold
+const FLING_MIN_STRENGTH = 2000; // fling right at the hold threshold
+const FLING_MAX_STRENGTH = 4200; // fling after a full FLING_MAX_HOLD_MS hold
 const FLING_MAX_HOLD_MS = 1500; // holding longer than this stops adding power
-const FLING_DURATION_MS = 650;
+const FLING_DURATION_MS = 600;
 
 // Double-tap/double-click: everything on the canvas scatters and reforms.
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_DIST = 48;
-const SUPERNOVA_STRENGTH = 3800;
-const SUPERNOVA_DURATION_MS = 900;
+const SUPERNOVA_STRENGTH = 4200;
+const SUPERNOVA_DURATION_MS = 800;
 
 const PARTICLE_RADIUS = 1.8;
-const TRAIL_ALPHA = 0.16;
+const TRAIL_ALPHA = 0.22; // higher = shorter ghost trails = crisper motion
 
 export default function ParticleCanvas({
   pattern,
@@ -118,10 +118,14 @@ export default function ParticleCanvas({
     if (!canvas || !maybeContext) return;
     const context: CanvasRenderingContext2D = maybeContext;
 
-    // Assigning .width resets/clears the bitmap even to the same value, so
-    // this also wipes any leftover trail from a previous generation.
-    canvas.width = size;
-    canvas.height = size;
+    // Render at device-pixel resolution (physics and pointer math stay in
+    // CSS pixels via the transform) so motion looks crisp on scaled displays.
+    // Assigning .width also resets/clears the bitmap even to the same value,
+    // wiping any leftover trail from a previous generation.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const stops = PALETTES[palette];
     const theme = WORLD_THEMES[palette];
@@ -323,6 +327,10 @@ export default function ParticleCanvas({
         role="img"
         aria-label={label ?? "A one-of-a-kind particle shape"}
         style={{
+          // Displayed size stays in CSS pixels; the backing store is scaled
+          // by devicePixelRatio in the effect above.
+          width: size,
+          height: size,
           backgroundColor: `rgb(${WORLD_THEMES[palette].trail.join(",")})`,
           borderColor: "var(--border)",
         }}

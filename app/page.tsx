@@ -13,7 +13,7 @@ import {
   hashUnit,
   textToPersonPattern,
 } from "@/lib/particles";
-import { playBurstChime, type BurstKind } from "@/components/sound";
+import { playBurstChime, playEnableChime, type BurstKind } from "@/components/sound";
 
 type Mode = "single" | "compare";
 
@@ -470,6 +470,9 @@ export default function Home() {
     const next = !soundOn;
     setSoundOn(next);
     localStorage.setItem(SOUND_STORAGE_KEY, next ? "1" : "0");
+    // Instant proof the speakers work — and it primes the AudioContext
+    // inside this click's user gesture.
+    if (next) playEnableChime();
   }
 
   // Mirror state into the URL so the address bar is always shareable.
@@ -603,13 +606,14 @@ export default function Home() {
       <button
         onClick={toggleSound}
         aria-pressed={soundOn}
-        aria-label={soundOn ? "Turn burst chimes off" : "Turn burst chimes on"}
-        title="Soft chimes on bursts (off by default)"
-        className={`rounded-full p-3 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING} ${
+        aria-label={soundOn ? "Turn sound effects off" : "Turn sound effects on"}
+        title="Sound effects on bursts (off by default)"
+        className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING} ${
           soundOn ? "text-[color:var(--ink)]" : "text-[color:var(--ink-faint)]"
         }`}
       >
         {soundOn ? <SoundOnIcon className="w-5 h-5" /> : <SoundOffIcon className="w-5 h-5" />}
+        {soundOn ? "Sound on" : "Sound off"}
       </button>
       </div>
 
