@@ -41,22 +41,55 @@ interface Particle {
   hue: number;
 }
 
+/** An outward shockwave. Taps, hold-release flings, and supernovas are all bursts with different knobs. */
+interface Burst {
+  x: number;
+  y: number;
+  time: number;
+  radius: number;
+  strength: number;
+  duration: number;
+}
+
 const SPRING_STRENGTH = 3.2; // per second; how eagerly particles return to their home shape
 const JITTER_SPEED = 8;
 const REPEL_RADIUS = 220; // px; how far the cursor's push reaches
 const REPEL_STRENGTH = 1400; // px/s; velocity at the very center of the repel radius
+
 const BURST_RADIUS = 220;
 const BURST_STRENGTH = 2200;
 const BURST_DURATION_MS = 550;
 const MAX_ACTIVE_BURSTS = 5;
+
+// Press-and-hold: after the threshold, the repel force inverts into an
+// attract-and-swirl vortex; releasing flings everything back out.
+const HOLD_THRESHOLD_MS = 150; // below this a press still counts as a tap
+const ATTRACT_RADIUS = 340;
+const ATTRACT_STRENGTH = 1100;
+const SWIRL_STRENGTH = 900; // tangential component that makes the vortex spin
+
+const FLING_RADIUS = 340;
+const FLING_MIN_STRENGTH = 1600; // fling right at the hold threshold
+const FLING_MAX_STRENGTH = 3600; // fling after a full FLING_MAX_HOLD_MS hold
+const FLING_MAX_HOLD_MS = 1500; // holding longer than this stops adding power
+const FLING_DURATION_MS = 650;
+
+// Double-tap/double-click: everything on the canvas scatters and reforms.
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_DIST = 48;
+const SUPERNOVA_STRENGTH = 3800;
+const SUPERNOVA_DURATION_MS = 900;
+
 const PARTICLE_RADIUS = 1.8;
 const TRAIL_ALPHA = 0.16;
 
 export default function ParticleCanvas({ pattern, palette, size = 560, label }: ParticleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
-  const mouseRef = useRef<{ x: number; y: number } | null>(null);
-  const burstsRef = useRef<{ x: number; y: number; time: number }[]>([]);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const holdRef = useRef<{ x: number; y: number; startTime: number } | null>(null);
+  const lastTapRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const burstsRef = useRef<Burst[]>([]);
   const reducedMotion = useSyncExternalStore(
     subscribeReducedMotion,
     getReducedMotionSnapshot,
@@ -102,9 +135,11 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
       context.fillStyle = `rgba(255,250,242,${TRAIL_ALPHA})`;
       context.fillRect(0, 0, size, size);
 
-      const bursts = burstsRef.current.filter((b) => now - b.time < BURST_DURATION_MS);
+      const bursts = burstsRef.current.filter((b) => now - b.time < b.duration);
       burstsRef.current = bursts;
-      const mouse = mouseRef.current;
+      const pointer = pointerRef.current;
+      const hold = holdRef.current;
+      const attracting = hold !== null && now - hold.startTime >= HOLD_THRESHOLD_MS;
 
       for (const particle of particlesRef.current) {
         // Pull back toward the resting shape...
@@ -113,7 +148,7 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
 
         // ...plus a small ambient wobble so it still feels alive at rest.
         // Skipped under prefers-reduced-motion, since it's continuous motion
-        // the user never asked for (unlike the cursor/click interactions).
+        // the user never asked for (unlike the pointer interactions).
         const nx = (particle.x - size / 2) / (size / 2);
         const ny = (particle.y - size / 2) / (size / 2);
         const jitterAngle = flowAngle(nx, ny, t, pattern.flow);
@@ -122,9 +157,21 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
           vy += Math.sin(jitterAngle) * JITTER_SPEED;
         }
 
-        if (mouse) {
-          const dx = particle.x - mouse.x;
-          const dy = particle.y - mouse.y;
+        if (attracting) {
+          const dx = hold.x - particle.x;
+          const dy = hold.y - particle.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < ATTRACT_RADIUS && dist > 0.01) {
+            const falloff = (ATTRACT_RADIUS - dist) / ATTRACT_RADIUS;
+            vx += (dx / dist) * falloff * ATTRACT_STRENGTH;
+            vy += (dy / dist) * falloff * ATTRACT_STRENGTH;
+            // Perpendicular component turns the pull into a swirl.
+            vx += (-dy / dist) * falloff * SWIRL_STRENGTH;
+            vy += (dx / dist) * falloff * SWIRL_STRENGTH;
+          }
+        } else if (pointer) {
+          const dx = particle.x - pointer.x;
+          const dy = particle.y - pointer.y;
           const dist = Math.hypot(dx, dy);
           if (dist < REPEL_RADIUS && dist > 0.01) {
             const force = ((REPEL_RADIUS - dist) / REPEL_RADIUS) * REPEL_STRENGTH;
@@ -137,9 +184,9 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
           const dx = particle.x - burst.x;
           const dy = particle.y - burst.y;
           const dist = Math.hypot(dx, dy);
-          if (dist < BURST_RADIUS && dist > 0.01) {
-            const decay = 1 - (now - burst.time) / BURST_DURATION_MS;
-            const force = ((BURST_RADIUS - dist) / BURST_RADIUS) * BURST_STRENGTH * decay;
+          if (dist < burst.radius && dist > 0.01) {
+            const decay = 1 - (now - burst.time) / burst.duration;
+            const force = ((burst.radius - dist) / burst.radius) * burst.strength * decay;
             vx += (dx / dist) * force;
             vy += (dy / dist) * force;
           }
@@ -164,21 +211,91 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
     return () => cancelAnimationFrame(rafId);
   }, [pattern, palette, size, reducedMotion]);
 
-  function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+  function localPosition(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  function handleMouseLeave() {
-    mouseRef.current = null;
+  function addBurst(burst: Burst) {
+    burstsRef.current = [...burstsRef.current, burst].slice(-MAX_ACTIVE_BURSTS);
   }
 
-  function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    burstsRef.current = [
-      ...burstsRef.current,
-      { x: e.clientX - rect.left, y: e.clientY - rect.top, time: performance.now() },
-    ].slice(-MAX_ACTIVE_BURSTS);
+  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    // Capture so a finger/cursor dragged off the canvas keeps steering the
+    // hold instead of leaving it stuck on.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const pos = localPosition(e);
+    pointerRef.current = pos;
+    holdRef.current = { ...pos, startTime: performance.now() };
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    const pos = localPosition(e);
+    pointerRef.current = pos;
+    if (holdRef.current) {
+      holdRef.current.x = pos.x;
+      holdRef.current.y = pos.y;
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    const now = performance.now();
+    const pos = localPosition(e);
+    const hold = holdRef.current;
+    holdRef.current = null;
+    // A finger lifts off entirely; a mouse cursor is still hovering.
+    if (e.pointerType !== "mouse") pointerRef.current = null;
+    if (!hold) return;
+
+    const heldMs = now - hold.startTime;
+    if (heldMs < HOLD_THRESHOLD_MS) {
+      const last = lastTapRef.current;
+      const isDoubleTap =
+        last !== null &&
+        now - last.time < DOUBLE_TAP_MS &&
+        Math.hypot(pos.x - last.x, pos.y - last.y) < DOUBLE_TAP_DIST;
+      if (isDoubleTap) {
+        lastTapRef.current = null;
+        addBurst({
+          x: pos.x,
+          y: pos.y,
+          time: now,
+          radius: size * Math.SQRT2, // reaches every corner from anywhere
+          strength: SUPERNOVA_STRENGTH,
+          duration: SUPERNOVA_DURATION_MS,
+        });
+      } else {
+        lastTapRef.current = { x: pos.x, y: pos.y, time: now };
+        addBurst({
+          x: pos.x,
+          y: pos.y,
+          time: now,
+          radius: BURST_RADIUS,
+          strength: BURST_STRENGTH,
+          duration: BURST_DURATION_MS,
+        });
+      }
+    } else {
+      // Fling: the longer the hold, the harder everything scatters.
+      const power = Math.min(heldMs - HOLD_THRESHOLD_MS, FLING_MAX_HOLD_MS) / FLING_MAX_HOLD_MS;
+      addBurst({
+        x: pos.x,
+        y: pos.y,
+        time: now,
+        radius: FLING_RADIUS,
+        strength: FLING_MIN_STRENGTH + power * (FLING_MAX_STRENGTH - FLING_MIN_STRENGTH),
+        duration: FLING_DURATION_MS,
+      });
+    }
+  }
+
+  function handlePointerLeave() {
+    pointerRef.current = null;
+  }
+
+  function handlePointerCancel() {
+    holdRef.current = null;
+    pointerRef.current = null;
   }
 
   return (
@@ -188,10 +305,13 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
       height={size}
       role="img"
       aria-label={label ?? "A one-of-a-kind particle shape"}
-      className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none bg-white/40 border border-stone-300"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
+      className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none select-none bg-white/40 border border-stone-300"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      onPointerCancel={handlePointerCancel}
+      onContextMenu={(e) => e.preventDefault()}
     />
   );
 }
