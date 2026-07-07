@@ -146,5 +146,9 @@ each wave.
   round-trip, narrow viewport, no horizontal overflow).
   Note for future verification: rAF freezes when the Chrome window is
   occluded — bring the window to the foreground before judging animation.
-- [ ] Wave 2 (items 7–9)
-- [ ] Wave 3 (items 10–13)
+- [ ] Wave 2 (items 7–9) — deliberately deferred; Wave 3 shipped first by request
+- [x] Wave 3 (items 10–13) — shipped 2026-07-07: dice button with curated seeds,
+  blend mode (`v=blend` URL flag, seed = `a + " " + b`), order-independent
+  compatibility meter, opt-in WebAudio burst chimes (localStorage, never in
+  URLs). Verified: tsc, prod build, browser (dice commit + URL sync, blend
+  round-trip from fresh load, meter determinism, chime path error-free).
