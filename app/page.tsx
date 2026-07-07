@@ -9,8 +9,11 @@ import {
   PaletteId,
   PersonPattern,
   WORLD_THEMES,
+  compatibilityScore,
+  hashUnit,
   textToPersonPattern,
 } from "@/lib/particles";
+import { playBurstChime, type BurstKind } from "@/components/sound";
 
 type Mode = "single" | "compare";
 
@@ -61,6 +64,57 @@ function LinkIcon({ className }: { className?: string }) {
     >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+function DiceIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="8.5" cy="8.5" r="1.6" />
+      <circle cx="15.5" cy="8.5" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="8.5" cy="15.5" r="1.6" />
+      <circle cx="15.5" cy="15.5" r="1.6" />
+    </svg>
+  );
+}
+
+function SoundOnIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+    </svg>
+  );
+}
+
+function SoundOffIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none" />
+      <path d="m16 9 6 6" />
+      <path d="m22 9-6 6" />
     </svg>
   );
 }
@@ -116,6 +170,27 @@ function useResponsiveSize(preferred: number): number {
 const DEMO_WORDS = ["hello", "you?", "type your name…"];
 const DEMO_CYCLE_MS = 4000;
 
+// Curated seeds for the dice button — evocative little phrases that make
+// better shapes-with-a-story than a random string would.
+const SURPRISE_WORDS = [
+  "monsoon",
+  "first coffee",
+  "3am",
+  "grandma's kitchen",
+  "petrichor",
+  "midnight train",
+  "old bookstore",
+  "paper boats",
+  "the sea at night",
+  "summer 2009",
+  "chai in the rain",
+  "city lights",
+  "half-remembered dream",
+  "long drive home",
+  "borrowed sweater",
+  "last day of school",
+];
+
 function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
   const reducedMotion = useReducedMotion();
   const [wordIndex, setWordIndex] = useState(0);
@@ -150,12 +225,14 @@ function PersonFractal({
   palette,
   committed,
   onCommit,
+  soundOn = false,
   size = 560,
 }: {
   placeholder: string;
   palette: PaletteId;
   committed: string | null;
   onCommit: (value: string) => void;
+  soundOn?: boolean;
   size?: number;
 }) {
   const [text, setText] = useState(committed ?? "");
@@ -177,6 +254,18 @@ function PersonFractal({
     onCommit(text.trim() || "anonymous");
   }
 
+  function handleSurprise() {
+    const options = SURPRISE_WORDS.filter((w) => w !== committed);
+    const word = options[Math.floor(Math.random() * options.length)];
+    setText(word);
+    onCommit(word);
+  }
+
+  const handleBurst =
+    soundOn && committed
+      ? (kind: BurstKind) => playBurstChime(kind, hashUnit(committed, "pitch"))
+      : undefined;
+
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="flex flex-wrap gap-3 items-center justify-center">
@@ -196,6 +285,14 @@ function PersonFractal({
           <SparkleIcon className="w-4 h-4" />
           Generate
         </button>
+        <button
+          onClick={handleSurprise}
+          aria-label="Surprise me with a random seed"
+          title="Surprise me"
+          className={`inline-flex items-center justify-center bg-[color:var(--surface)] border border-[color:var(--border)] hover:border-[color:var(--ink-faint)] active:scale-95 transition text-[color:var(--ink-soft)] rounded-lg shadow-sm p-3 ${FOCUS_RING}`}
+        >
+          <DiceIcon className="w-5 h-5" />
+        </button>
       </div>
 
       {pattern ? (
@@ -205,11 +302,62 @@ function PersonFractal({
           size={responsiveSize}
           label={`A one-of-a-kind particle shape generated from "${committed}"`}
           hint="drag to scatter · hold to gather · double-tap to burst"
+          onBurst={handleBurst}
         />
       ) : (
         <AmbientDemo palette={palette} size={responsiveSize} />
       )}
     </div>
+  );
+}
+
+function BlendView({
+  a,
+  b,
+  palette,
+  soundOn,
+}: {
+  a: string;
+  b: string;
+  palette: PaletteId;
+  soundOn: boolean;
+}) {
+  const responsiveSize = useResponsiveSize(560);
+  const seed = `${a} ${b}`;
+  const pattern = useMemo(() => textToPersonPattern(seed), [seed]);
+  const handleBurst = soundOn
+    ? (kind: BurstKind) => playBurstChime(kind, hashUnit(seed, "pitch"))
+    : undefined;
+
+  return (
+    <ParticleCanvas
+      pattern={pattern}
+      palette={palette}
+      size={responsiveSize}
+      label={`A blended particle shape generated from "${a}" and "${b}"`}
+      hint="two of you, one shape"
+      onBurst={handleBurst}
+    />
+  );
+}
+
+function compatibilityLabel(score: number): string {
+  if (score < 20) return "parallel universes";
+  if (score < 40) return "friendly orbits";
+  if (score < 60) return "gravitational pull";
+  if (score < 80) return "cosmic overlap";
+  return "written in the stars";
+}
+
+function CompatibilityMeter({ a, b }: { a: string; b: string }) {
+  const score = compatibilityScore(a, b);
+  return (
+    <p className="text-sm italic text-[color:var(--ink-soft)] transition-colors duration-700 text-center">
+      &#10024; {compatibilityLabel(score)}: {score}%
+      <span className="block not-italic text-xs text-[color:var(--ink-faint)] mt-1">
+        (measured by an extremely serious cosmic instrument)
+      </span>
+    </p>
   );
 }
 
@@ -267,28 +415,34 @@ function ShareLinkButton() {
 
 const DEFAULT_PALETTE: PaletteId = "sunrise";
 
-/** Query-param names for shareable URLs: a/b = the two texts, m = mode, p = palette. */
+/** Query-param names for shareable URLs: a/b = the two texts, m = mode, p = palette, v=blend. */
 function buildShareQuery(
   mode: Mode,
   palette: PaletteId,
   committedA: string | null,
-  committedB: string | null
+  committedB: string | null,
+  blend: boolean
 ): string {
   const params = new URLSearchParams();
   if (committedA) params.set("a", committedA);
   if (mode === "compare") {
     params.set("m", "compare");
     if (committedB) params.set("b", committedB);
+    if (blend && committedA && committedB) params.set("v", "blend");
   }
   if (palette !== DEFAULT_PALETTE) params.set("p", palette);
   return params.toString();
 }
+
+const SOUND_STORAGE_KEY = "fractals-sound";
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("single");
   const [palette, setPalette] = useState<PaletteId>("sunrise");
   const [committedA, setCommittedA] = useState<string | null>(null);
   const [committedB, setCommittedB] = useState<string | null>(null);
+  const [blend, setBlend] = useState(false);
+  const [soundOn, setSoundOn] = useState(false);
   const urlSyncedOnceRef = useRef(false);
 
   // Restore state from the URL after mount. The page is statically
@@ -303,7 +457,20 @@ export default function Home() {
     const b = params.get("b");
     if (b) setCommittedB(b.slice(0, 64));
     if (params.get("m") === "compare" || b) setMode("compare");
+    if (params.get("v") === "blend") setBlend(true);
   }, []);
+
+  // Sound preference lives in localStorage, deliberately not in share URLs —
+  // nobody should get surprise audio from a link.
+  useEffect(() => {
+    if (localStorage.getItem(SOUND_STORAGE_KEY) === "1") setSoundOn(true);
+  }, []);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_STORAGE_KEY, next ? "1" : "0");
+  }
 
   // Mirror state into the URL so the address bar is always shareable.
   // replaceState (not pushState) so browsing history isn't spammed; Next.js
@@ -316,13 +483,13 @@ export default function Home() {
       urlSyncedOnceRef.current = true;
       return;
     }
-    const query = buildShareQuery(mode, palette, committedA, committedB);
+    const query = buildShareQuery(mode, palette, committedA, committedB, blend);
     window.history.replaceState(
       null,
       "",
       query ? `?${query}` : window.location.pathname
     );
-  }, [mode, palette, committedA, committedB]);
+  }, [mode, palette, committedA, committedB, blend]);
 
   const hasPattern =
     mode === "single" ? committedA !== null : committedA !== null || committedB !== null;
@@ -399,6 +566,7 @@ export default function Home() {
         </button>
       </div>
 
+      <div className="flex items-center gap-3">
       <div
         role="group"
         aria-label="Color palette"
@@ -432,6 +600,18 @@ export default function Home() {
           </button>
         ))}
       </div>
+      <button
+        onClick={toggleSound}
+        aria-pressed={soundOn}
+        aria-label={soundOn ? "Turn burst chimes off" : "Turn burst chimes on"}
+        title="Soft chimes on bursts (off by default)"
+        className={`rounded-full p-3 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING} ${
+          soundOn ? "text-[color:var(--ink)]" : "text-[color:var(--ink-faint)]"
+        }`}
+      >
+        {soundOn ? <SoundOnIcon className="w-5 h-5" /> : <SoundOffIcon className="w-5 h-5" />}
+      </button>
+      </div>
 
       {mode === "single" ? (
         <PersonFractal
@@ -439,23 +619,53 @@ export default function Home() {
           palette={palette}
           committed={committedA}
           onCommit={setCommittedA}
+          soundOn={soundOn}
         />
       ) : (
-        <div className="flex flex-col md:flex-row gap-10 items-start justify-center">
-          <PersonFractal
-            placeholder="first person's name..."
-            palette={palette}
-            committed={committedA}
-            onCommit={setCommittedA}
-            size={400}
-          />
-          <PersonFractal
-            placeholder="second person's name..."
-            palette={palette}
-            committed={committedB}
-            onCommit={setCommittedB}
-            size={400}
-          />
+        <div className="flex flex-col items-center gap-6">
+          {blend && committedA && committedB ? (
+            <BlendView a={committedA} b={committedB} palette={palette} soundOn={soundOn} />
+          ) : (
+            <div className="flex flex-col md:flex-row gap-10 items-start justify-center">
+              <PersonFractal
+                placeholder="first person's name..."
+                palette={palette}
+                committed={committedA}
+                onCommit={setCommittedA}
+                soundOn={soundOn}
+                size={400}
+              />
+              <PersonFractal
+                placeholder="second person's name..."
+                palette={palette}
+                committed={committedB}
+                onCommit={setCommittedB}
+                soundOn={soundOn}
+                size={400}
+              />
+            </div>
+          )}
+          {committedA && committedB && (
+            <button
+              onClick={() => setBlend(!blend)}
+              className={`inline-flex items-center gap-1.5 bg-[color:var(--accent)] hover:bg-[color:var(--accent-hover)] active:scale-95 transition text-[color:var(--accent-ink)] rounded-full shadow-sm shadow-black/10 px-5 py-3 text-sm font-medium ${FOCUS_RING}`}
+            >
+              {blend ? (
+                <>
+                  <CompareIcon className="w-4 h-4" />
+                  Split apart
+                </>
+              ) : (
+                <>
+                  <SparkleIcon className="w-4 h-4" />
+                  Blend into one
+                </>
+              )}
+            </button>
+          )}
+          {committedA && committedB && (
+            <CompatibilityMeter a={committedA} b={committedB} />
+          )}
         </div>
       )}
 

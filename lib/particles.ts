@@ -13,6 +13,22 @@ function unit(text: string, salt: string): number {
   return hash32(text, salt) / 0xffffffff;
 }
 
+/** Deterministic 0-1 value for a text+salt pair; the seed for anything that should feel personal. */
+export function hashUnit(text: string, salt: string): number {
+  return unit(text, salt);
+}
+
+/**
+ * Deterministic, order-independent 0-100 score for a pair of texts. Pure
+ * entertainment — the same two names always get the same number, which is
+ * the whole joke.
+ */
+export function compatibilityScore(a: string, b: string): number {
+  const [first, second] = [a, b].sort();
+  const separator = String.fromCharCode(31); // keeps ("ab","c") and ("a","bc") apart
+  return hash32(first + separator + second, "compat") % 101;
+}
+
 export type PaletteId = "sunrise" | "ocean" | "neon" | "monochrome";
 
 export const PALETTE_LABELS: Record<PaletteId, string> = {

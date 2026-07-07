@@ -11,6 +11,7 @@ import {
   shapeHomePosition,
 } from "@/lib/particles";
 import { useReducedMotion } from "@/components/useReducedMotion";
+import type { BurstKind } from "@/components/sound";
 
 interface ParticleCanvasProps {
   pattern: PersonPattern;
@@ -19,6 +20,8 @@ interface ParticleCanvasProps {
   label?: string;
   /** Short in-canvas caption that fades out on the first pointer interaction. */
   hint?: string;
+  /** Fired for every user-triggered shockwave (not repel/attract). */
+  onBurst?: (kind: BurstKind) => void;
 }
 
 interface Particle {
@@ -77,6 +80,7 @@ export default function ParticleCanvas({
   size = 560,
   label,
   hint,
+  onBurst,
 }: ParticleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [interacted, setInteracted] = useState(false);
@@ -273,6 +277,7 @@ export default function ParticleCanvas({
           strength: SUPERNOVA_STRENGTH,
           duration: SUPERNOVA_DURATION_MS,
         });
+        onBurst?.("supernova");
       } else {
         lastTapRef.current = { x: pos.x, y: pos.y, time: now };
         addBurst({
@@ -283,6 +288,7 @@ export default function ParticleCanvas({
           strength: BURST_STRENGTH,
           duration: BURST_DURATION_MS,
         });
+        onBurst?.("tap");
       }
     } else {
       // Fling: the longer the hold, the harder everything scatters.
@@ -295,6 +301,7 @@ export default function ParticleCanvas({
         strength: FLING_MIN_STRENGTH + power * (FLING_MAX_STRENGTH - FLING_MIN_STRENGTH),
         duration: FLING_DURATION_MS,
       });
+      onBurst?.("fling");
     }
   }
 
