@@ -156,3 +156,6 @@ each wave.
   pluck / rising fling whoosh / supernova noise+sub bang), labeled sound
   toggle with enable-confirmation chime, snappier physics (stronger
   spring/repel/bursts, shorter trails), devicePixelRatio-sharp canvas.
+  Confirmed working by Madhavan 2026-07-07.
+
+Next up: Wave 2 (items 7–9) — the only remaining work in this spec.
