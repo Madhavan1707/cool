@@ -8,6 +8,7 @@ import {
   PALETTE_LABELS,
   PaletteId,
   PersonPattern,
+  WORLD_THEMES,
   textToPersonPattern,
 } from "@/lib/particles";
 
@@ -81,8 +82,10 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+// Colors come from CSS variables set on <main> from the active WorldTheme,
+// so every control follows the selected palette.
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fffaf2]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ring-offset)]";
 
 const VIEWPORT_PADDING = 48;
 const MIN_CANVAS_SIZE = 220;
@@ -183,11 +186,11 @@ function PersonFractal({
           placeholder={placeholder}
           maxLength={64}
           aria-label="Your name, a memory, or anything else"
-          className={`bg-white/70 border border-stone-300 rounded-lg shadow-sm px-3 py-3 text-base sm:text-sm w-56 text-stone-800 placeholder:text-stone-400 transition-colors focus:border-orange-400 ${FOCUS_RING}`}
+          className={`bg-[color:var(--surface)] border border-[color:var(--border)] rounded-lg shadow-sm px-3 py-3 text-base sm:text-sm w-56 text-[color:var(--ink)] placeholder:text-[color:var(--ink-faint)] transition-colors focus:border-[color:var(--accent)] ${FOCUS_RING}`}
         />
         <button
           onClick={handleGenerate}
-          className={`inline-flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-95 transition text-white rounded-lg shadow-sm shadow-orange-900/20 px-4 py-3 text-sm font-medium ${FOCUS_RING}`}
+          className={`inline-flex items-center gap-1.5 bg-[color:var(--accent)] hover:bg-[color:var(--accent-hover)] active:scale-95 transition text-[color:var(--accent-ink)] rounded-lg shadow-sm shadow-black/10 px-4 py-3 text-sm font-medium ${FOCUS_RING}`}
         >
           <SparkleIcon className="w-4 h-4" />
           Generate
@@ -195,7 +198,7 @@ function PersonFractal({
       </div>
 
       {committed && pattern && (
-        <p className="text-sm text-stone-600 text-center max-w-xs">
+        <p className="text-sm text-[color:var(--ink-soft)] transition-colors duration-700 text-center max-w-xs">
           &ldquo;{committed}&rdquo; &mdash; scatter it with your cursor, it finds its way back
         </p>
       )}
@@ -249,7 +252,7 @@ function ShareLinkButton() {
   return (
     <button
       onClick={handleCopy}
-      className={`inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-stone-300 shadow-sm hover:border-stone-400 active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-stone-700 ${FOCUS_RING}`}
+      className={`inline-flex items-center gap-2 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-[color:var(--ink-soft)] ${FOCUS_RING}`}
     >
       {copied ? (
         <>
@@ -328,19 +331,42 @@ export default function Home() {
   const hasPattern =
     mode === "single" ? committedA !== null : committedA !== null || committedB !== null;
 
+  const theme = WORLD_THEMES[palette];
+  const themeVars = {
+    "--ink": theme.ink,
+    "--ink-soft": theme.inkSoft,
+    "--ink-faint": theme.inkFaint,
+    "--accent": theme.accent,
+    "--accent-hover": theme.accentHover,
+    "--accent-ink": theme.accentInk,
+    "--surface": theme.surface,
+    "--border": theme.border,
+    "--ring-offset": theme.ringOffset,
+  } as React.CSSProperties;
+
   return (
     <main
-      style={{
-        backgroundImage:
-          "radial-gradient(1100px 550px at 50% -8%, rgba(255,180,110,0.35), transparent 60%), linear-gradient(to bottom, #fffaf2, #ffedd9 45%, #ffd9ad)",
-      }}
-      className="min-h-screen text-stone-800 flex flex-col items-center gap-10 px-6 py-12 sm:py-16"
+      style={themeVars}
+      className="relative min-h-screen text-[color:var(--ink)] transition-colors duration-700 flex flex-col items-center gap-10 px-6 py-12 sm:py-16"
     >
+      {/* One fixed layer per palette; gradients can't transition, so the
+          world switch is an opacity cross-fade between prebuilt layers. */}
+      {(Object.keys(WORLD_THEMES) as PaletteId[]).map((id) => (
+        <div
+          key={id}
+          aria-hidden
+          style={{ backgroundImage: WORLD_THEMES[id].background }}
+          className={`fixed inset-0 -z-10 transition-opacity duration-700 ${
+            palette === id ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ))}
+
       <div className="text-center space-y-3 max-w-xl">
-        <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-stone-900">
+        <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[color:var(--ink)] transition-colors duration-700">
           Fractals of You
         </h1>
-        <p className="text-stone-600 leading-relaxed">
+        <p className="text-[color:var(--ink-soft)] transition-colors duration-700 leading-relaxed">
           Type your name, birthday, or anything else. It becomes a shape made
           of particles that belongs only to you. Wave your cursor over it or
           click to scatter it, and it drifts back to reform. Everything runs
@@ -351,15 +377,15 @@ export default function Home() {
       <div
         role="group"
         aria-label="Display mode"
-        className="flex gap-2 rounded-full bg-white/60 backdrop-blur-sm border border-stone-300 shadow-sm p-1"
+        className="flex gap-2 rounded-full bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm p-1 transition-colors duration-700"
       >
         <button
           onClick={() => setMode("single")}
           aria-pressed={mode === "single"}
           className={`inline-flex items-center gap-1.5 px-4 py-3 rounded-full text-sm transition active:scale-95 ${FOCUS_RING} ${
             mode === "single"
-              ? "bg-orange-600 text-white"
-              : "text-stone-600 hover:text-stone-900"
+              ? "bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
+              : "text-[color:var(--ink-soft)] hover:text-[color:var(--ink)]"
           }`}
         >
           <SingleIcon className="w-4 h-4" />
@@ -370,8 +396,8 @@ export default function Home() {
           aria-pressed={mode === "compare"}
           className={`inline-flex items-center gap-1.5 px-4 py-3 rounded-full text-sm transition active:scale-95 ${FOCUS_RING} ${
             mode === "compare"
-              ? "bg-orange-600 text-white"
-              : "text-stone-600 hover:text-stone-900"
+              ? "bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
+              : "text-[color:var(--ink-soft)] hover:text-[color:var(--ink)]"
           }`}
         >
           <CompareIcon className="w-4 h-4" />
@@ -382,7 +408,7 @@ export default function Home() {
       <div
         role="group"
         aria-label="Color palette"
-        className="flex gap-4 items-start bg-white/60 backdrop-blur-sm border border-stone-300 shadow-sm rounded-2xl px-5 py-3"
+        className="flex gap-4 items-start bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm rounded-2xl px-5 py-3 transition-colors duration-700"
       >
         {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
           <button
@@ -396,15 +422,15 @@ export default function Home() {
               style={{ backgroundImage: paletteGradient(PALETTES[id]) }}
               className={`w-12 h-6 rounded-full border-2 transition ${
                 palette === id
-                  ? "border-stone-800"
-                  : "border-transparent group-hover:border-stone-400"
+                  ? "border-[color:var(--ink)]"
+                  : "border-transparent group-hover:border-[color:var(--ink-faint)]"
               }`}
             />
             <span
-              className={`text-xs ${
+              className={`text-xs transition-colors duration-700 ${
                 palette === id
-                  ? "text-stone-800 font-medium"
-                  : "text-stone-500"
+                  ? "text-[color:var(--ink)] font-medium"
+                  : "text-[color:var(--ink-soft)]"
               }`}
             >
               {PALETTE_LABELS[id]}

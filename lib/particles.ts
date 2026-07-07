@@ -62,6 +62,93 @@ export const PALETTES: Record<PaletteId, [number, number, number][]> = {
   ],
 };
 
+/**
+ * Everything outside the canvas that should follow the palette: the page is a
+ * world the particles live in, not a fixed orange frame around them. Kept next
+ * to PALETTES so a new palette can't ship without its world.
+ */
+export interface WorldTheme {
+  /** CSS background-image for the page (cross-faded on palette switch). */
+  background: string;
+  ink: string;
+  inkSoft: string;
+  inkFaint: string;
+  accent: string;
+  accentHover: string;
+  accentInk: string;
+  surface: string;
+  border: string;
+  /** Focus-ring offset color; matches the page base so rings read cleanly. */
+  ringOffset: string;
+  /** Canvas base/trail color the particles fade against. */
+  trail: [number, number, number];
+  /** Draw particles with additive ("lighter") blending for glow-on-dark. */
+  additive: boolean;
+}
+
+export const WORLD_THEMES: Record<PaletteId, WorldTheme> = {
+  sunrise: {
+    background:
+      "radial-gradient(1100px 550px at 50% -8%, rgba(255,180,110,0.35), transparent 60%), linear-gradient(to bottom, #fffaf2, #ffedd9 45%, #ffd9ad)",
+    ink: "#1c1917",
+    inkSoft: "#57534e",
+    inkFaint: "#a8a29e",
+    accent: "#ea580c",
+    accentHover: "#c2410c",
+    accentInk: "#ffffff",
+    surface: "rgba(255,255,255,0.6)",
+    border: "#d6d3d1",
+    ringOffset: "#fffaf2",
+    trail: [255, 250, 242],
+    additive: false,
+  },
+  ocean: {
+    background:
+      "radial-gradient(1100px 550px at 50% -8%, rgba(64,156,196,0.28), transparent 60%), linear-gradient(to bottom, #0c1826, #0f2438 45%, #14324c)",
+    ink: "#e6f1f7",
+    inkSoft: "#a3bfd0",
+    inkFaint: "#6e8ba0",
+    accent: "#14b8a6",
+    accentHover: "#2dd4bf",
+    accentInk: "#052e2b",
+    surface: "rgba(255,255,255,0.07)",
+    border: "rgba(255,255,255,0.16)",
+    ringOffset: "#0c1826",
+    trail: [10, 22, 36],
+    additive: false,
+  },
+  neon: {
+    background:
+      "radial-gradient(1100px 550px at 50% -8%, rgba(190,20,180,0.22), transparent 60%), linear-gradient(to bottom, #08040f, #0d0618 45%, #120a22)",
+    ink: "#f4ecff",
+    inkSoft: "#b9a8d6",
+    inkFaint: "#7a6899",
+    accent: "#d946ef",
+    accentHover: "#e879f9",
+    accentInk: "#2a0430",
+    surface: "rgba(255,255,255,0.06)",
+    border: "rgba(255,255,255,0.16)",
+    ringOffset: "#08040f",
+    trail: [8, 4, 15],
+    additive: true,
+  },
+  monochrome: {
+    background:
+      "radial-gradient(1100px 550px at 50% -8%, rgba(120,105,85,0.14), transparent 60%), linear-gradient(to bottom, #faf6ee, #f3ecdf 45%, #e9dfcd)",
+    ink: "#221c15",
+    inkSoft: "#5c5347",
+    inkFaint: "#a39885",
+    accent: "#292019",
+    accentHover: "#443a2f",
+    accentInk: "#faf6ee",
+    surface: "rgba(255,255,255,0.55)",
+    border: "#d8cfc0",
+    ringOffset: "#faf6ee",
+    trail: [250, 246, 238],
+    additive: false,
+  },
+};
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }

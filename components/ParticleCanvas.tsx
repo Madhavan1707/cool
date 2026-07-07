@@ -5,6 +5,7 @@ import {
   PALETTES,
   PaletteId,
   PersonPattern,
+  WORLD_THEMES,
   flowAngle,
   paletteColor,
   shapeHomePosition,
@@ -110,6 +111,8 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
     canvas.height = size;
 
     const stops = PALETTES[palette];
+    const theme = WORLD_THEMES[palette];
+    const [trailR, trailG, trailB] = theme.trail;
     let rafId: number;
     let lastTime = performance.now();
 
@@ -118,8 +121,12 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
       lastTime = now;
       const t = now / 1000;
 
-      context.fillStyle = `rgba(255,250,242,${TRAIL_ALPHA})`;
+      // The trail fade must paint over previous frames, so it always runs in
+      // source-over even when the particles themselves blend additively.
+      context.globalCompositeOperation = "source-over";
+      context.fillStyle = `rgba(${trailR},${trailG},${trailB},${TRAIL_ALPHA})`;
       context.fillRect(0, 0, size, size);
+      if (theme.additive) context.globalCompositeOperation = "lighter";
 
       const bursts = burstsRef.current.filter((b) => now - b.time < b.duration);
       burstsRef.current = bursts;
@@ -291,7 +298,11 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
       height={size}
       role="img"
       aria-label={label ?? "A one-of-a-kind particle shape"}
-      className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none select-none bg-white/40 border border-stone-300"
+      style={{
+        backgroundColor: `rgb(${WORLD_THEMES[palette].trail.join(",")})`,
+        borderColor: "var(--border)",
+      }}
+      className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none select-none border"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
