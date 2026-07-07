@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PALETTES,
   PaletteId,
@@ -17,6 +17,8 @@ interface ParticleCanvasProps {
   palette: PaletteId;
   size?: number;
   label?: string;
+  /** Short in-canvas caption that fades out on the first pointer interaction. */
+  hint?: string;
 }
 
 interface Particle {
@@ -69,8 +71,15 @@ const SUPERNOVA_DURATION_MS = 900;
 const PARTICLE_RADIUS = 1.8;
 const TRAIL_ALPHA = 0.16;
 
-export default function ParticleCanvas({ pattern, palette, size = 560, label }: ParticleCanvasProps) {
+export default function ParticleCanvas({
+  pattern,
+  palette,
+  size = 560,
+  label,
+  hint,
+}: ParticleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [interacted, setInteracted] = useState(false);
   const particlesRef = useRef<Particle[]>([]);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const holdRef = useRef<{ x: number; y: number; startTime: number } | null>(null);
@@ -217,12 +226,14 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
     // Capture so a finger/cursor dragged off the canvas keeps steering the
     // hold instead of leaving it stuck on.
     e.currentTarget.setPointerCapture(e.pointerId);
+    if (!interacted) setInteracted(true);
     const pos = localPosition(e);
     pointerRef.current = pos;
     holdRef.current = { ...pos, startTime: performance.now() };
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!interacted) setInteracted(true);
     const pos = localPosition(e);
     pointerRef.current = pos;
     if (holdRef.current) {
@@ -292,23 +303,37 @@ export default function ParticleCanvas({ pattern, palette, size = 560, label }: 
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={size}
-      height={size}
-      role="img"
-      aria-label={label ?? "A one-of-a-kind particle shape"}
-      style={{
-        backgroundColor: `rgb(${WORLD_THEMES[palette].trail.join(",")})`,
-        borderColor: "var(--border)",
-      }}
-      className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none select-none border"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
-      onPointerCancel={handlePointerCancel}
-      onContextMenu={(e) => e.preventDefault()}
-    />
+    <div className="relative">
+      <canvas
+        ref={canvasRef}
+        width={size}
+        height={size}
+        role="img"
+        aria-label={label ?? "A one-of-a-kind particle shape"}
+        style={{
+          backgroundColor: `rgb(${WORLD_THEMES[palette].trail.join(",")})`,
+          borderColor: "var(--border)",
+        }}
+        className="rounded-2xl shadow-2xl shadow-black/40 cursor-pointer touch-none select-none border"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
+        onPointerCancel={handlePointerCancel}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {hint && (
+        <div
+          aria-hidden
+          className={`absolute bottom-3 inset-x-0 flex justify-center pointer-events-none transition-opacity duration-500 ${
+            interacted ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <span className="bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] rounded-full px-3 py-1 text-xs text-[color:var(--ink-soft)]">
+            {hint}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

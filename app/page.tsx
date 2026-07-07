@@ -140,6 +140,7 @@ function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
       palette={palette}
       size={size}
       label="A drifting demo shape — generate your own by typing above"
+      hint="just a demo — type above to make yours"
     />
   );
 }
@@ -197,18 +198,13 @@ function PersonFractal({
         </button>
       </div>
 
-      {committed && pattern && (
-        <p className="text-sm text-[color:var(--ink-soft)] transition-colors duration-700 text-center max-w-xs">
-          &ldquo;{committed}&rdquo; &mdash; scatter it with your cursor, it finds its way back
-        </p>
-      )}
-
       {pattern ? (
         <ParticleCanvas
           pattern={pattern}
           palette={palette}
           size={responsiveSize}
           label={`A one-of-a-kind particle shape generated from "${committed}"`}
+          hint="drag to scatter · hold to gather · double-tap to burst"
         />
       ) : (
         <AmbientDemo palette={palette} size={responsiveSize} />
@@ -367,10 +363,8 @@ export default function Home() {
           Fractals of You
         </h1>
         <p className="text-[color:var(--ink-soft)] transition-colors duration-700 leading-relaxed">
-          Type your name, birthday, or anything else. It becomes a shape made
-          of particles that belongs only to you. Wave your cursor over it or
-          click to scatter it, and it drifts back to reform. Everything runs
-          in your browser; nothing is sent anywhere.
+          Type anything &mdash; it becomes a living particle shape that belongs
+          only to you.
         </p>
       </div>
 
@@ -466,6 +460,10 @@ export default function Home() {
       )}
 
       {hasPattern && <ShareLinkButton />}
+
+      <footer className="mt-auto text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
+        Everything runs in your browser; nothing is sent anywhere.
+      </footer>
     </main>
   );
 }
