@@ -22,6 +22,8 @@ interface ParticleCanvasProps {
   hint?: string;
   /** Fired for every user-triggered shockwave (not repel/attract). */
   onBurst?: (kind: BurstKind) => void;
+  /** Hands the live canvas element to the parent (for clip recording); called with null on unmount. */
+  registerCanvas?: (canvas: HTMLCanvasElement | null) => void;
 }
 
 interface Particle {
@@ -81,6 +83,7 @@ export default function ParticleCanvas({
   label,
   hint,
   onBurst,
+  registerCanvas,
 }: ParticleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [interacted, setInteracted] = useState(false);
@@ -111,6 +114,12 @@ export default function ParticleCanvas({
       };
     });
   }, [pattern, size, reducedMotion]);
+
+  useEffect(() => {
+    if (!registerCanvas) return;
+    registerCanvas(canvasRef.current);
+    return () => registerCanvas(null);
+  }, [registerCanvas]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

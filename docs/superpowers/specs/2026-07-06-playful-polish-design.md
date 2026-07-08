@@ -146,7 +146,19 @@ each wave.
   round-trip, narrow viewport, no horizontal overflow).
   Note for future verification: rAF freezes when the Chrome window is
   occluded — bring the window to the foreground before judging animation.
-- [ ] Wave 2 (items 7–9) — deliberately deferred; Wave 3 shipped first by request
+- [x] Wave 2 (items 7–9) — shipped 2026-07-08: dynamic OG images
+  (`app/api/og/route.tsx` + `generateMetadata` in a new server `app/page.tsx`
+  shell over the client UI moved to `app/home.tsx`; `metadataBase` set in
+  layout), PNG wallpaper download (1080×1920 via pure-draw
+  `components/exportImage.ts`), 3s webm clip recording (feature-detected,
+  `registerCanvas` prop on ParticleCanvas). Verified: tsc, prod build, OG
+  route fetched for single/compare/blend/default variants (all
+  palette-matched), bot-served head contains og:/twitter: tags with
+  param-matched image URL, PNG download confirmed 1080×1920 with correct
+  content, recording pipeline confirmed producing real webm frames (empty
+  clips only occur when the window is occluded — the known rAF-freeze quirk;
+  record with the window visible). Note: `/` is now server-rendered on demand
+  because generateMetadata reads searchParams — inherent to per-URL OG images.
 - [x] Wave 3 (items 10–13) — shipped 2026-07-07: dice button with curated seeds,
   blend mode (`v=blend` URL flag, seed = `a + " " + b`), order-independent
   compatibility meter, opt-in WebAudio burst chimes (localStorage, never in
@@ -158,4 +170,4 @@ each wave.
   spring/repel/bursts, shorter trails), devicePixelRatio-sharp canvas.
   Confirmed working by Madhavan 2026-07-07.
 
-Next up: Wave 2 (items 7–9) — the only remaining work in this spec.
+All waves shipped — this spec is complete.

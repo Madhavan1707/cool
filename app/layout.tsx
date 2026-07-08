@@ -13,6 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Resolves the relative og:image URLs from page metadata and /api/og.
+  metadataBase: new URL("https://fractalsofyou.vercel.app"),
   title: "Fractals of You",
   description: "Turn your name into a one-of-a-kind particle shape you can play with.",
 };
