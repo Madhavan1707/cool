@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ParticleCanvas from "@/components/ParticleCanvas";
+import ShapeCertificate from "@/components/ShapeCertificate";
 import {
   WallpaperItem,
   downloadBlob,
@@ -233,6 +234,48 @@ const SURPRISE_WORDS = [
   "last day of school",
 ];
 
+// "Found, not made": on a fresh Find the canvas riffles through a few random
+// shapes and settles on the real one, so the shape reads as located in the
+// space rather than built. The existing spring physics turns each pattern swap
+// into a morph (same machinery the ambient demo uses to cycle words), so this
+// is just fast cycling — no physics changes. Durations ease slower into the
+// landing. Skipped under prefers-reduced-motion, which opts out of exactly this
+// kind of unrequested motion.
+const RIFFLE_DURATIONS = [80, 90, 110, 150, 210];
+
+function useRiffle() {
+  const reducedMotion = useReducedMotion();
+  const [riffle, setRiffle] = useState<PersonPattern | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clear = useCallback(() => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }, []);
+
+  useEffect(() => clear, [clear]);
+
+  const randomPattern = () => textToPersonPattern(Math.random().toString(36).slice(2));
+
+  const startRiffle = useCallback(() => {
+    if (reducedMotion) return;
+    clear();
+    // First flash is synchronous so the real answer never shows through the
+    // same render that commits it.
+    setRiffle(randomPattern());
+    let elapsed = 0;
+    for (let i = 1; i < RIFFLE_DURATIONS.length; i++) {
+      elapsed += RIFFLE_DURATIONS[i - 1];
+      timers.current.push(setTimeout(() => setRiffle(randomPattern()), elapsed));
+    }
+    elapsed += RIFFLE_DURATIONS[RIFFLE_DURATIONS.length - 1];
+    // Land: drop the riffle so the committed pattern shows through.
+    timers.current.push(setTimeout(() => setRiffle(null), elapsed));
+  }, [reducedMotion, clear]);
+
+  return { riffle, startRiffle };
+}
+
 function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
   const reducedMotion = useReducedMotion();
   const [wordIndex, setWordIndex] = useState(0);
@@ -270,6 +313,7 @@ function PersonFractal({
   soundOn = false,
   size = 560,
   registerCanvas,
+  certificateMode = "none",
 }: {
   placeholder: string;
   palette: PaletteId;
@@ -278,14 +322,18 @@ function PersonFractal({
   soundOn?: boolean;
   size?: number;
   registerCanvas?: (canvas: HTMLCanvasElement | null) => void;
+  certificateMode?: "full" | "compact" | "none";
 }) {
   const [text, setText] = useState(committed ?? "");
   const responsiveSize = useResponsiveSize(size);
+  const { riffle, startRiffle } = useRiffle();
 
-  const pattern = useMemo<PersonPattern | null>(
+  const realPattern = useMemo<PersonPattern | null>(
     () => (committed ? textToPersonPattern(committed) : null),
     [committed]
   );
+  // While riffling, show the flashed random shape; otherwise the real one.
+  const displayPattern = riffle ?? realPattern;
 
   // Keep the input in step when the committed text arrives from outside the
   // component — restored from the URL on load, or remembered across a
@@ -295,6 +343,7 @@ function PersonFractal({
   }, [committed]);
 
   function handleGenerate() {
+    startRiffle();
     onCommit(text.trim() || "anonymous");
   }
 
@@ -302,6 +351,7 @@ function PersonFractal({
     const options = SURPRISE_WORDS.filter((w) => w !== committed);
     const word = options[Math.floor(Math.random() * options.length)];
     setText(word);
+    startRiffle();
     onCommit(word);
   }
 
@@ -327,7 +377,7 @@ function PersonFractal({
           className={`inline-flex items-center gap-1.5 bg-[color:var(--accent)] hover:bg-[color:var(--accent-hover)] active:scale-95 transition text-[color:var(--accent-ink)] rounded-lg shadow-sm shadow-black/10 px-4 py-3 text-sm font-medium ${FOCUS_RING}`}
         >
           <SparkleIcon className="w-4 h-4" />
-          Generate
+          Find yours
         </button>
         <button
           onClick={handleSurprise}
@@ -339,9 +389,9 @@ function PersonFractal({
         </button>
       </div>
 
-      {pattern ? (
+      {displayPattern ? (
         <ParticleCanvas
-          pattern={pattern}
+          pattern={displayPattern}
           palette={palette}
           size={responsiveSize}
           label={`A one-of-a-kind particle shape generated from "${committed}"`}
@@ -351,6 +401,16 @@ function PersonFractal({
         />
       ) : (
         <AmbientDemo palette={palette} size={responsiveSize} />
+      )}
+
+      {/* The address resolves as the shape lands — hidden mid-riffle so it
+          reads as "found", then fades in. */}
+      {committed && certificateMode !== "none" && !riffle && (
+        <ShapeCertificate
+          text={committed}
+          palette={palette}
+          compact={certificateMode === "compact"}
+        />
       )}
     </div>
   );
@@ -377,15 +437,22 @@ function BlendView({
     : undefined;
 
   return (
-    <ParticleCanvas
-      pattern={pattern}
-      palette={palette}
-      size={responsiveSize}
-      label={`A blended particle shape generated from "${a}" and "${b}"`}
-      hint="two of you, one shape"
-      onBurst={handleBurst}
-      registerCanvas={registerCanvas}
-    />
+    <div className="flex flex-col items-center gap-4">
+      <ParticleCanvas
+        pattern={pattern}
+        palette={palette}
+        size={responsiveSize}
+        label={`A blended particle shape generated from "${a}" and "${b}"`}
+        hint="two of you, one shape"
+        onBurst={handleBurst}
+        registerCanvas={registerCanvas}
+      />
+      <ShapeCertificate
+        text={seed}
+        palette={palette}
+        framing="a form that is neither of you — only here when you're together"
+      />
+    </div>
   );
 }
 
@@ -711,8 +778,8 @@ export default function Home() {
           Fractals of You
         </h1>
         <p className="text-[color:var(--ink-soft)] transition-colors duration-700 leading-relaxed">
-          Type anything &mdash; it becomes a living particle shape that belongs
-          only to you.
+          Type anything. Somewhere in a space larger than the universe, one
+          shape was already yours &mdash; this finds it.
         </p>
       </div>
 
@@ -803,6 +870,7 @@ export default function Home() {
           onCommit={setCommittedA}
           soundOn={soundOn}
           registerCanvas={registerCanvas}
+          certificateMode="full"
         />
       ) : (
         <div className="flex flex-col items-center gap-6">
@@ -824,6 +892,7 @@ export default function Home() {
                 soundOn={soundOn}
                 size={400}
                 registerCanvas={committedA ? registerCanvas : undefined}
+                certificateMode="compact"
               />
               <PersonFractal
                 placeholder="second person's name..."
@@ -833,6 +902,7 @@ export default function Home() {
                 soundOn={soundOn}
                 size={400}
                 registerCanvas={!committedA && committedB ? registerCanvas : undefined}
+                certificateMode="compact"
               />
             </div>
           )}

@@ -256,6 +256,106 @@ export interface PersonPattern {
 const PARTICLE_COUNT_MIN = 260;
 const PARTICLE_COUNT_MAX = 460;
 
+// Crockford base-32: no I/L/O/U, so an address never reads as a typo of itself.
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/** Encodes the low 5*length bits of a 32-bit value as an uppercase base-32 group. */
+function base32(value: number, length: number): string {
+  let v = value >>> 0;
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out = CROCKFORD[v % 32] + out;
+    v = Math.floor(v / 32);
+  }
+  return out;
+}
+
+/**
+ * A shape's permanent coordinate in the space of all shapes. Both lines are
+ * honest slices of the same deterministic hashes that build the pattern, so
+ * the address is a mathematical fact about those exact characters — it existed
+ * before the site did, the way a digit-position exists inside pi. The catalog
+ * groups read as an archive number ("this was already indexed"); the
+ * celestial-style coordinate renders that position beautifully (it locates a
+ * point in the space of all shapes, not the sky).
+ */
+export interface ShapeAddress {
+  /** e.g. "K7QN·3F2M" */
+  catalog: string;
+  /** e.g. "14ʰ32ᵐ · +82°41′" */
+  coordinate: string;
+}
+
+export function shapeAddress(text: string): ShapeAddress {
+  const g1 = base32(hash32(text, "addr-a"), 4);
+  const g2 = base32(hash32(text, "addr-b"), 4);
+  const ra = hash32(text, "coord-ra");
+  const dec = hash32(text, "coord-dec");
+  const raH = ra % 24;
+  const raM = (ra >>> 5) % 60;
+  const decDeg = dec % 90;
+  const decSign = (dec >>> 7) % 2 === 0 ? "+" : "−";
+  const decM = (dec >>> 9) % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return {
+    catalog: `${g1}·${g2}`,
+    coordinate: `${pad(raH)}ʰ${pad(raM)}ᵐ · ${decSign}${pad(decDeg)}°${pad(decM)}′`,
+  };
+}
+
+/** Nudges a character to its neighbour (a→b, z→a, 4→5…) so a substitution reads as one keystroke. */
+function shiftChar(c: string): string {
+  if (c >= "a" && c <= "y") return String.fromCharCode(c.charCodeAt(0) + 1);
+  if (c === "z") return "a";
+  if (c >= "A" && c <= "Y") return String.fromCharCode(c.charCodeAt(0) + 1);
+  if (c === "Z") return "A";
+  if (c >= "0" && c <= "8") return String.fromCharCode(c.charCodeAt(0) + 1);
+  if (c === "9") return "0";
+  if (c === " ") return "e";
+  return "a";
+}
+
+/**
+ * The strings one keystroke away from `text` — a substitution, an adjacent
+ * swap, a deletion, or a doubled letter. Because the pattern comes from a hash,
+ * each neighbour's shape shares nothing with the original: proof that exactly
+ * one arrangement is you. Deterministic (ordered by a stable hash key), so the
+ * same input always surfaces the same neighbours — they're fixed facts, not a
+ * shuffle.
+ */
+export function nearestMisses(text: string, count = 5): string[] {
+  const base = text.length > 0 ? text : "anonymous";
+  const chars = Array.from(base); // Array.from keeps emoji/surrogate pairs whole.
+  const n = chars.length;
+  const candidates: string[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const sub = [...chars];
+    sub[i] = shiftChar(chars[i]);
+    candidates.push(sub.join(""));
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const sw = [...chars];
+    [sw[i], sw[i + 1]] = [sw[i + 1], sw[i]];
+    candidates.push(sw.join(""));
+  }
+  for (let i = 0; i < n; i++) {
+    candidates.push([...chars.slice(0, i), ...chars.slice(i + 1)].join(""));
+  }
+  for (let i = 0; i < n; i++) {
+    candidates.push([...chars.slice(0, i + 1), chars[i], ...chars.slice(i + 1)].join(""));
+  }
+
+  const seen = new Set<string>([base]);
+  const distinct = candidates.filter(
+    (c) => c.length > 0 && !seen.has(c) && (seen.add(c), true)
+  );
+
+  return distinct
+    .sort((a, b) => hash32(base + " " + a, "miss") - hash32(base + " " + b, "miss"))
+    .slice(0, count);
+}
+
 /** Turns arbitrary text into a personal particle pattern: a resting shape plus ambient jitter. */
 export function textToPersonPattern(text: string): PersonPattern {
   return {
