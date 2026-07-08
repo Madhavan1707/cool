@@ -13,16 +13,16 @@ import { useReducedMotion } from "@/components/useReducedMotion";
 
 const SHAPE_SIZE = 200;
 
-// The riffle is reframed as a narrated search: a few strangers one keystroke
-// away flash past as "not this one", then it snaps to yours and the address
-// writes out. Paced slowly enough to read (~5s to fully unfold), then it HOLDS
-// — the reveal never closes itself; the user taps / clicks Continue / hits Esc.
-// A tap during the search jumps straight to the answer for the impatient.
-const CANDIDATE_COUNT = 4;
-const CANDIDATE_MS = 800; // each stranger held this long (readable)
-const LAND_PAUSE_MS = 500; // beat on "— this one." before the address types
-const TYPE_MS = 55; // per character of the catalog line
-const MESSAGE_DELAY_MS = 250; // after the catalog finishes, reveal the rest
+// The riffle is reframed as a narrated search: strangers one keystroke away
+// flash past as "not this one", then it snaps to yours and the whole certificate
+// types itself out, line by line, character by character. It HOLDS — no
+// auto-close; the user leaves via Continue / tap / Esc. A tap mid-way reveals
+// everything at once for the impatient.
+const CANDIDATE_COUNT = 3;
+const CANDIDATE_MS = 700; // each stranger held this long (readable)
+const LAND_PAUSE_MS = 450; // beat on "— this one." before the typing starts
+const TYPE_MS = 30; // per character
+const LINE_PAUSE_MS = 220; // beat between lines
 const FADE_MS = 350; // overlay fade-out before onDone
 
 export default function RevealSequence({
@@ -37,16 +37,30 @@ export default function RevealSequence({
   const reduced = useReducedMotion();
   const theme = WORLD_THEMES[palette];
   const address = shapeAddress(seed);
-  const catalogLine = `FORM No. ${address.catalog}`;
-  const structure = shapeDescription(seed);
 
-  // A few real one-keystroke neighbours to flash as rejected candidates.
+  // The certificate, typed out one line at a time.
+  const lines = [
+    `FORM No. ${address.catalog}`,
+    `${address.coordinate} · in the space of all shapes`,
+    shapeDescription(seed),
+    "always here. you didn't make it — you found it.",
+  ];
+  const lineStyles: { className: string; color: string }[] = [
+    { className: "font-mono text-sm tracking-wide", color: theme.ink },
+    { className: "font-mono text-xs", color: theme.inkFaint },
+    { className: "font-mono text-xs", color: theme.inkFaint },
+    { className: "text-sm italic mt-1", color: theme.inkSoft },
+  ];
+
   const candidates = useRef(nearestMisses(seed, CANDIDATE_COUNT)).current;
 
-  // candidateIndex >= 0 → still flashing strangers; < 0 → landed on yours.
+  // candidateIndex >= 0 → flashing strangers; < 0 → landed on yours.
   const [candidateIndex, setCandidateIndex] = useState(reduced ? -1 : 0);
-  const [typed, setTyped] = useState(reduced ? catalogLine.length : 0);
-  const [showMessage, setShowMessage] = useState(reduced);
+  // progress.line = current line being typed; chars = chars shown of it.
+  // line >= lines.length means fully typed.
+  const [progress, setProgress] = useState(
+    reduced ? { line: lines.length, chars: 0 } : { line: 0, chars: 0 }
+  );
   const [visible, setVisible] = useState(false);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -59,7 +73,6 @@ export default function RevealSequence({
     timers.current = [];
   };
 
-  // Fade out, then hand back to the parent. Guarded so repeated taps are safe.
   const close = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -68,21 +81,17 @@ export default function RevealSequence({
     setTimeout(() => onDoneRef.current(), FADE_MS);
   }, []);
 
-  // Jump straight to the fully-revealed answer (tap during search / reduced motion).
   const revealFull = useCallback(() => {
     clearTimers();
     setCandidateIndex(-1);
-    setTyped(catalogLine.length);
-    setShowMessage(true);
-  }, [catalogLine.length]);
+    setProgress({ line: lines.length, chars: 0 });
+  }, [lines.length]);
 
   useEffect(() => {
     const push = (delay: number, fn: () => void) =>
       timers.current.push(setTimeout(fn, delay));
-
     const raf = requestAnimationFrame(() => setVisible(true));
 
-    // Reduced motion: the statement is already shown (initial state); just hold.
     if (!reduced) {
       for (let i = 1; i < candidates.length; i++) {
         push(CANDIDATE_MS * i, () => setCandidateIndex(i));
@@ -90,13 +99,21 @@ export default function RevealSequence({
       const landAt = CANDIDATE_MS * candidates.length;
       push(landAt, () => setCandidateIndex(-1));
 
-      const typeStart = landAt + LAND_PAUSE_MS;
-      for (let c = 1; c <= catalogLine.length; c++) {
-        push(typeStart + c * TYPE_MS, () => setTyped(c));
+      // Type each line in turn, character by character.
+      let elapsed = LAND_PAUSE_MS;
+      for (let i = 0; i < lines.length; i++) {
+        const len = lines[i].length;
+        if (i > 0) {
+          const startAt = elapsed;
+          push(landAt + startAt, () => setProgress({ line: i, chars: 0 }));
+        }
+        for (let c = 1; c <= len; c++) {
+          const at = elapsed + c * TYPE_MS;
+          push(landAt + at, () => setProgress({ line: i, chars: c }));
+        }
+        elapsed += len * TYPE_MS + LINE_PAUSE_MS;
       }
-      const typeEnd = typeStart + catalogLine.length * TYPE_MS;
-      push(typeEnd + MESSAGE_DELAY_MS, () => setShowMessage(true));
-      // Deliberately no close timer — the reveal holds until the user leaves.
+      push(landAt + elapsed, () => setProgress({ line: lines.length, chars: 0 }));
     }
 
     const scheduled = timers.current;
@@ -108,7 +125,6 @@ export default function RevealSequence({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Esc always closes, even mid-search.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
@@ -118,12 +134,13 @@ export default function RevealSequence({
   }, [close]);
 
   const landed = candidateIndex < 0;
+  const typedDone = progress.line >= lines.length;
   const shownSeed = landed ? seed : candidates[candidateIndex] ?? seed;
   const shapeColor = landed ? theme.accent : theme.inkFaint;
 
-  // First interaction reveals the answer; once shown, it closes.
+  // First interaction reveals everything at once; once done, it closes.
   function handleOverlayClick() {
-    if (!showMessage) revealFull();
+    if (!typedDone) revealFull();
     else close();
   }
 
@@ -152,8 +169,8 @@ export default function RevealSequence({
         className="transition-opacity duration-200"
       />
 
-      {/* Fixed height so the shape doesn't jump as lines appear below it. */}
-      <div className="h-32 flex flex-col items-center justify-start gap-1.5 text-center">
+      {/* Fixed min-height so the shape doesn't drift as lines type in below it. */}
+      <div className="min-h-[13rem] flex flex-col items-center justify-start gap-1.5 text-center">
         {!landed ? (
           <p className="text-sm italic" style={{ color: theme.inkSoft }}>
             not this one
@@ -163,48 +180,32 @@ export default function RevealSequence({
             <p className="text-base" style={{ color: theme.ink }}>
               — this one.
             </p>
-            {typed > 0 && (
-              <p
-                className="font-mono text-sm tracking-wide"
-                style={{ color: theme.ink }}
+            {lines.map((text, i) => {
+              if (i > progress.line) return null;
+              const shown = i < progress.line ? text : text.slice(0, progress.chars);
+              const typing = i === progress.line && progress.chars < text.length;
+              return (
+                <p
+                  key={i}
+                  className={lineStyles[i].className}
+                  style={{ color: lineStyles[i].color }}
+                >
+                  {shown}
+                  {typing && <span className="opacity-50">|</span>}
+                </p>
+              );
+            })}
+            {typedDone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                }}
+                style={{ backgroundColor: theme.accent, color: theme.accentInk }}
+                className="mt-4 rounded-full px-6 py-2.5 text-sm font-medium active:scale-95 transition"
               >
-                {catalogLine.slice(0, typed)}
-                {typed < catalogLine.length && (
-                  <span className="opacity-50">|</span>
-                )}
-              </p>
-            )}
-            {showMessage && (
-              <div className="transition-opacity duration-500 flex flex-col items-center gap-1.5">
-                <p
-                  className="font-mono text-xs"
-                  style={{ color: theme.inkFaint }}
-                >
-                  {address.coordinate} · in the space of all shapes
-                </p>
-                <p
-                  className="font-mono text-xs"
-                  style={{ color: theme.inkFaint }}
-                >
-                  {structure}
-                </p>
-                <p
-                  className="text-sm italic mt-1"
-                  style={{ color: theme.inkSoft }}
-                >
-                  always here. you didn&apos;t make it — you found it.
-                </p>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    close();
-                  }}
-                  style={{ backgroundColor: theme.accent, color: theme.accentInk }}
-                  className="mt-4 rounded-full px-6 py-2.5 text-sm font-medium active:scale-95 transition"
-                >
-                  Continue →
-                </button>
-              </div>
+                Continue →
+              </button>
             )}
           </>
         )}
@@ -214,7 +215,7 @@ export default function RevealSequence({
         className="absolute bottom-8 text-xs transition-opacity duration-300"
         style={{ color: theme.inkFaint }}
       >
-        {showMessage ? "tap anywhere, or press Esc, to close" : "tap to reveal your shape"}
+        {typedDone ? "tap anywhere, or press Esc, to close" : "tap to reveal your shape"}
       </p>
     </div>
   );

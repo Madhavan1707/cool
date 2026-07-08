@@ -283,16 +283,16 @@ function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
 
   return (
     <div className="flex flex-col items-center gap-3">
+      <p className="text-xs text-center text-[color:var(--ink-faint)] transition-colors duration-500 min-h-[1.25rem]">
+        <span className="text-[color:var(--ink-soft)]">{item.text}</span>
+        {item.label && <span> · {item.label}</span>}
+      </p>
       <ParticleCanvas
         pattern={pattern}
         palette={palette}
         size={size}
         label={`A drifting shape for "${item.text}" — type above to make your own`}
       />
-      <p className="text-xs text-center text-[color:var(--ink-faint)] transition-colors duration-500 min-h-[1.25rem]">
-        <span className="text-[color:var(--ink-soft)]">{item.text}</span>
-        {item.label && <span> · {item.label}</span>}
-      </p>
     </div>
   );
 }
@@ -382,6 +382,16 @@ function PersonFractal({
         </button>
       </div>
 
+      {/* The reveal (played over the page) delivers the address as a moment;
+          this persistent card sits above the shape as its reference copy. */}
+      {committed && certificateMode !== "none" && (
+        <ShapeCertificate
+          text={committed}
+          palette={palette}
+          compact={certificateMode === "compact"}
+        />
+      )}
+
       {pattern ? (
         <ParticleCanvas
           pattern={pattern}
@@ -394,16 +404,6 @@ function PersonFractal({
         />
       ) : (
         <AmbientDemo palette={palette} size={responsiveSize} />
-      )}
-
-      {/* The reveal (played over the page) delivers the address as a moment;
-          this persistent card is the reference copy under the shape. */}
-      {committed && certificateMode !== "none" && (
-        <ShapeCertificate
-          text={committed}
-          palette={palette}
-          compact={certificateMode === "compact"}
-        />
       )}
     </div>
   );
@@ -431,6 +431,11 @@ function BlendView({
 
   return (
     <div className="flex flex-col items-center gap-4">
+      <ShapeCertificate
+        text={seed}
+        palette={palette}
+        framing="a form that is neither of you — only here when you're together"
+      />
       <ParticleCanvas
         pattern={pattern}
         palette={palette}
@@ -439,11 +444,6 @@ function BlendView({
         hint="two of you, one shape"
         onBurst={handleBurst}
         registerCanvas={registerCanvas}
-      />
-      <ShapeCertificate
-        text={seed}
-        palette={palette}
-        framing="a form that is neither of you — only here when you're together"
       />
     </div>
   );
