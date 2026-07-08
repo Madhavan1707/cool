@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ParticleCanvas from "@/components/ParticleCanvas";
 import ShapeCertificate from "@/components/ShapeCertificate";
+import RevealSequence from "@/components/RevealSequence";
 import {
   WallpaperItem,
   downloadBlob,
@@ -234,48 +235,6 @@ const SURPRISE_WORDS = [
   "last day of school",
 ];
 
-// "Found, not made": on a fresh Find the canvas riffles through a few random
-// shapes and settles on the real one, so the shape reads as located in the
-// space rather than built. The existing spring physics turns each pattern swap
-// into a morph (same machinery the ambient demo uses to cycle words), so this
-// is just fast cycling — no physics changes. Durations ease slower into the
-// landing. Skipped under prefers-reduced-motion, which opts out of exactly this
-// kind of unrequested motion.
-const RIFFLE_DURATIONS = [80, 90, 110, 150, 210];
-
-function useRiffle() {
-  const reducedMotion = useReducedMotion();
-  const [riffle, setRiffle] = useState<PersonPattern | null>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const clear = useCallback(() => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  }, []);
-
-  useEffect(() => clear, [clear]);
-
-  const randomPattern = () => textToPersonPattern(Math.random().toString(36).slice(2));
-
-  const startRiffle = useCallback(() => {
-    if (reducedMotion) return;
-    clear();
-    // First flash is synchronous so the real answer never shows through the
-    // same render that commits it.
-    setRiffle(randomPattern());
-    let elapsed = 0;
-    for (let i = 1; i < RIFFLE_DURATIONS.length; i++) {
-      elapsed += RIFFLE_DURATIONS[i - 1];
-      timers.current.push(setTimeout(() => setRiffle(randomPattern()), elapsed));
-    }
-    elapsed += RIFFLE_DURATIONS[RIFFLE_DURATIONS.length - 1];
-    // Land: drop the riffle so the committed pattern shows through.
-    timers.current.push(setTimeout(() => setRiffle(null), elapsed));
-  }, [reducedMotion, clear]);
-
-  return { riffle, startRiffle };
-}
-
 function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
   const reducedMotion = useReducedMotion();
   const [wordIndex, setWordIndex] = useState(0);
@@ -314,6 +273,7 @@ function PersonFractal({
   size = 560,
   registerCanvas,
   certificateMode = "none",
+  onFind,
 }: {
   placeholder: string;
   palette: PaletteId;
@@ -323,17 +283,16 @@ function PersonFractal({
   size?: number;
   registerCanvas?: (canvas: HTMLCanvasElement | null) => void;
   certificateMode?: "full" | "compact" | "none";
+  /** Fires the narrated reveal for a fresh find (dice/Enter/button); not on URL restore. */
+  onFind?: (seed: string) => void;
 }) {
   const [text, setText] = useState(committed ?? "");
   const responsiveSize = useResponsiveSize(size);
-  const { riffle, startRiffle } = useRiffle();
 
-  const realPattern = useMemo<PersonPattern | null>(
+  const pattern = useMemo<PersonPattern | null>(
     () => (committed ? textToPersonPattern(committed) : null),
     [committed]
   );
-  // While riffling, show the flashed random shape; otherwise the real one.
-  const displayPattern = riffle ?? realPattern;
 
   // Keep the input in step when the committed text arrives from outside the
   // component — restored from the URL on load, or remembered across a
@@ -343,15 +302,16 @@ function PersonFractal({
   }, [committed]);
 
   function handleGenerate() {
-    startRiffle();
-    onCommit(text.trim() || "anonymous");
+    const value = text.trim() || "anonymous";
+    onFind?.(value);
+    onCommit(value);
   }
 
   function handleSurprise() {
     const options = SURPRISE_WORDS.filter((w) => w !== committed);
     const word = options[Math.floor(Math.random() * options.length)];
     setText(word);
-    startRiffle();
+    onFind?.(word);
     onCommit(word);
   }
 
@@ -389,9 +349,9 @@ function PersonFractal({
         </button>
       </div>
 
-      {displayPattern ? (
+      {pattern ? (
         <ParticleCanvas
-          pattern={displayPattern}
+          pattern={pattern}
           palette={palette}
           size={responsiveSize}
           label={`A one-of-a-kind particle shape generated from "${committed}"`}
@@ -403,9 +363,9 @@ function PersonFractal({
         <AmbientDemo palette={palette} size={responsiveSize} />
       )}
 
-      {/* The address resolves as the shape lands — hidden mid-riffle so it
-          reads as "found", then fades in. */}
-      {committed && certificateMode !== "none" && !riffle && (
+      {/* The reveal (played over the page) delivers the address as a moment;
+          this persistent card is the reference copy under the shape. */}
+      {committed && certificateMode !== "none" && (
         <ShapeCertificate
           text={committed}
           palette={palette}
@@ -669,6 +629,15 @@ export default function Home() {
   const [soundOn, setSoundOn] = useState(false);
   const urlSyncedOnceRef = useRef(false);
 
+  // The narrated reveal that plays over the page on a fresh find. The nonce
+  // keys the overlay so re-finding (or a dice roll) restarts it cleanly.
+  const [reveal, setReveal] = useState<{ seed: string; nonce: number } | null>(null);
+  const revealNonce = useRef(0);
+  const startReveal = useCallback((seed: string) => {
+    revealNonce.current += 1;
+    setReveal({ seed, nonce: revealNonce.current });
+  }, []);
+
   // Whichever canvas is currently "the" shape registers itself here so the
   // record-clip button can capture its live stream.
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -871,6 +840,7 @@ export default function Home() {
           soundOn={soundOn}
           registerCanvas={registerCanvas}
           certificateMode="full"
+          onFind={startReveal}
         />
       ) : (
         <div className="flex flex-col items-center gap-6">
@@ -893,6 +863,7 @@ export default function Home() {
                 size={400}
                 registerCanvas={committedA ? registerCanvas : undefined}
                 certificateMode="compact"
+                onFind={startReveal}
               />
               <PersonFractal
                 placeholder="second person's name..."
@@ -903,6 +874,7 @@ export default function Home() {
                 size={400}
                 registerCanvas={!committedA && committedB ? registerCanvas : undefined}
                 certificateMode="compact"
+                onFind={startReveal}
               />
             </div>
           )}
@@ -941,6 +913,15 @@ export default function Home() {
       <footer className="mt-auto text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
         Everything runs in your browser; nothing is sent anywhere.
       </footer>
+
+      {reveal && (
+        <RevealSequence
+          key={reveal.nonce}
+          seed={reveal.seed}
+          palette={palette}
+          onDone={() => setReveal(null)}
+        />
+      )}
     </main>
   );
 }

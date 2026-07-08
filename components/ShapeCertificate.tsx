@@ -1,59 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   PaletteId,
   WORLD_THEMES,
   nearestMisses,
   shapeAddress,
-  shapeHomePosition,
-  textToPersonPattern,
 } from "@/lib/particles";
+import StillShape from "@/components/StillShape";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ring-offset)]";
-
-const MINI_SIZE = 66;
-const MINI_MAX_DOTS = 160;
-const MINI_DOT_RADIUS = 1;
-
-// A still, single-colour rendering of a shape's resting curve — a "ghost" of
-// a person you're not. Home positions only: no simulation, no animation loop.
-function MiniShape({ seed, color }: { seed: string; color: string }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = ref.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(MINI_SIZE * dpr);
-    canvas.height = Math.round(MINI_SIZE * dpr);
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, MINI_SIZE, MINI_SIZE);
-
-    const pattern = textToPersonPattern(seed);
-    const dots = Math.min(pattern.particleCount, MINI_MAX_DOTS);
-    context.fillStyle = color;
-    for (let i = 0; i < dots; i++) {
-      const home = shapeHomePosition(i / dots, MINI_SIZE, pattern.shape);
-      context.beginPath();
-      context.arc(home.x, home.y, MINI_DOT_RADIUS, 0, Math.PI * 2);
-      context.fill();
-    }
-  }, [seed, color]);
-
-  return (
-    <canvas
-      ref={ref}
-      width={MINI_SIZE}
-      height={MINI_SIZE}
-      style={{ width: MINI_SIZE, height: MINI_SIZE }}
-      className="opacity-70"
-    />
-  );
-}
 
 function NearestMisses({ text, palette }: { text: string; palette: PaletteId }) {
   const [open, setOpen] = useState(false);
@@ -74,7 +31,14 @@ function NearestMisses({ text, palette }: { text: string; palette: PaletteId }) 
           <div className="flex flex-wrap justify-center gap-2 max-w-md">
             {misses.map((miss) => (
               <figure key={miss} title={miss} className="leading-none">
-                <MiniShape seed={miss} color={ghost} />
+                <StillShape
+                  seed={miss}
+                  size={66}
+                  color={ghost}
+                  maxDots={160}
+                  dotRadius={1}
+                  className="opacity-70"
+                />
               </figure>
             ))}
           </div>
