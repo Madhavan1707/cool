@@ -6,6 +6,7 @@ import {
   WORLD_THEMES,
   nearestMisses,
   shapeAddress,
+  shapeDescription,
 } from "@/lib/particles";
 import StillShape from "@/components/StillShape";
 import { useReducedMotion } from "@/components/useReducedMotion";
@@ -37,6 +38,7 @@ export default function RevealSequence({
   const theme = WORLD_THEMES[palette];
   const address = shapeAddress(seed);
   const catalogLine = `FORM No. ${address.catalog}`;
+  const structure = shapeDescription(seed);
 
   // A few real one-keystroke neighbours to flash as rejected candidates.
   const candidates = useRef(nearestMisses(seed, CANDIDATE_COUNT)).current;
@@ -179,6 +181,12 @@ export default function RevealSequence({
                   style={{ color: theme.inkFaint }}
                 >
                   {address.coordinate} · in the space of all shapes
+                </p>
+                <p
+                  className="font-mono text-xs"
+                  style={{ color: theme.inkFaint }}
+                >
+                  {structure}
                 </p>
                 <p
                   className="text-sm italic mt-1"

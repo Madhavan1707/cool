@@ -356,6 +356,17 @@ export function nearestMisses(text: string, count = 5): string[] {
     .slice(0, count);
 }
 
+/**
+ * A short physical description of a shape, read from its actual parameters —
+ * the petals you can count and the angle it's turned to, like the physical
+ * description on a specimen card.
+ */
+export function shapeDescription(text: string): string {
+  const { shape } = textToPersonPattern(text);
+  const degrees = (((Math.round((shape.rotation * 180) / Math.PI) % 360) + 360) % 360);
+  return `${shape.petals}-petal form · turning ${degrees}°`;
+}
+
 /** Turns arbitrary text into a personal particle pattern: a resting shape plus ambient jitter. */
 export function textToPersonPattern(text: string): PersonPattern {
   return {

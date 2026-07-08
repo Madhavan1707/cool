@@ -20,6 +20,7 @@ import {
   hashUnit,
   textToPersonPattern,
 } from "@/lib/particles";
+import { onThisDay } from "@/lib/onThisDay";
 import { playBurstChime, playEnableChime, type BurstKind } from "@/components/sound";
 
 type Mode = "single" | "compare";
@@ -209,10 +210,32 @@ function useResponsiveSize(preferred: number): number {
   return size;
 }
 
-// Words the empty state drifts through before the user types anything, so
-// first paint is already alive instead of a dead placeholder box.
-const DEMO_WORDS = ["hello", "you?", "type your name…"];
 const DEMO_CYCLE_MS = 4000;
+
+interface DemoItem {
+  text: string; // seed rendered as a drifting shape
+  label: string; // small caption naming what it is
+}
+
+const DEMO_PROMPT: DemoItem = { text: "type your name", label: "↑ now, yours" };
+
+// First render (static shell + first client paint) shows this date-free set, so
+// server and client match; the real, date-derived items load in an effect.
+const DEMO_FALLBACK: DemoItem[] = [{ text: "hello", label: "already here" }, DEMO_PROMPT];
+
+// Before you type anything, the space drifts through things that already exist
+// in it — today, a moment from history, the year — each as its own shape. The
+// point: the space was full long before you arrived.
+function buildDemoItems(now: Date): DemoItem[] {
+  const items: DemoItem[] = [
+    { text: now.toLocaleDateString(undefined, { month: "long", day: "numeric" }), label: "today" },
+  ];
+  const event = onThisDay(now.getMonth() + 1, now.getDate());
+  if (event) items.push({ text: event.text, label: `on this day, ${event.year}` });
+  items.push({ text: String(now.getFullYear()), label: "the year" });
+  items.push(DEMO_PROMPT);
+  return items;
+}
 
 // Curated seeds for the dice button — evocative little phrases that make
 // better shapes-with-a-story than a random string would.
@@ -237,30 +260,40 @@ const SURPRISE_WORDS = [
 
 function AmbientDemo({ palette, size }: { palette: PaletteId; size: number }) {
   const reducedMotion = useReducedMotion();
-  const [wordIndex, setWordIndex] = useState(0);
+  const [items, setItems] = useState<DemoItem[]>(DEMO_FALLBACK);
+  const [index, setIndex] = useState(0);
+
+  // Date-derived items only after mount, so the statically prerendered shell and
+  // the first client render agree (no hydration mismatch).
+  useEffect(() => {
+    setItems(buildDemoItems(new Date()));
+  }, []);
 
   // Under prefers-reduced-motion the demo holds its first shape instead of
-  // cycling — the morphing between words is exactly the kind of unrequested
-  // motion that setting asks us to skip.
+  // cycling — the morphing is exactly the kind of unrequested motion that
+  // setting asks us to skip.
   useEffect(() => {
     if (reducedMotion) return;
-    const id = setInterval(
-      () => setWordIndex((i) => (i + 1) % DEMO_WORDS.length),
-      DEMO_CYCLE_MS
-    );
+    const id = setInterval(() => setIndex((i) => i + 1), DEMO_CYCLE_MS);
     return () => clearInterval(id);
   }, [reducedMotion]);
 
-  const pattern = useMemo(() => textToPersonPattern(DEMO_WORDS[wordIndex]), [wordIndex]);
+  const item = items[index % items.length];
+  const pattern = useMemo(() => textToPersonPattern(item.text), [item.text]);
 
   return (
-    <ParticleCanvas
-      pattern={pattern}
-      palette={palette}
-      size={size}
-      label="A drifting demo shape — generate your own by typing above"
-      hint="just a demo — type above to make yours"
-    />
+    <div className="flex flex-col items-center gap-3">
+      <ParticleCanvas
+        pattern={pattern}
+        palette={palette}
+        size={size}
+        label={`A drifting shape for "${item.text}" — type above to make your own`}
+      />
+      <p className="text-xs text-center text-[color:var(--ink-faint)] transition-colors duration-500 min-h-[1.25rem]">
+        <span className="text-[color:var(--ink-soft)]">{item.text}</span>
+        {item.label && <span> · {item.label}</span>}
+      </p>
+    </div>
   );
 }
 
