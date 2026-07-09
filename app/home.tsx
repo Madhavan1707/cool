@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ParticleCanvas from "@/components/ParticleCanvas";
 import ShapeCertificate from "@/components/ShapeCertificate";
 import RevealSequence from "@/components/RevealSequence";
+import TipJar from "@/components/TipJar";
 import {
   WallpaperItem,
   downloadBlob,
@@ -943,7 +944,11 @@ export default function Home() {
         </div>
       )}
 
-      <footer className="mt-auto text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
+      <div className="mt-auto flex justify-center">
+        <TipJar />
+      </div>
+
+      <footer className="text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
         Everything runs in your browser; nothing is sent anywhere.
       </footer>
 
