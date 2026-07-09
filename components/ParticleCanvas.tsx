@@ -354,7 +354,7 @@ export default function ParticleCanvas({
       {hint && (
         <div
           aria-hidden
-          className={`absolute bottom-3 inset-x-0 flex justify-center pointer-events-none transition-opacity duration-500 ${
+          className={`absolute top-3 inset-x-0 flex justify-center pointer-events-none transition-opacity duration-500 ${
             interacted ? "opacity-0" : "opacity-100"
           }`}
         >

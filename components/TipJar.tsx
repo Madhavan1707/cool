@@ -129,10 +129,11 @@ export default function TipJar() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className={`inline-flex items-center gap-2 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition rounded-full px-4 py-2 text-xs font-medium text-[color:var(--ink-soft)] ${FOCUS_RING}`}
+        aria-label="Tip the maker"
+        title="Tip the maker"
+        className={`inline-flex items-center justify-center rounded-full p-3 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition text-[color:var(--ink-soft)] ${FOCUS_RING}`}
       >
-        <HeartIcon className="w-3.5 h-3.5" />
-        Tip the maker
+        <HeartIcon className="w-5 h-5" />
       </button>
 
       {open && (

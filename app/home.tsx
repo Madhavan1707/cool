@@ -187,6 +187,11 @@ function CheckIcon({ className }: { className?: string }) {
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ring-offset)]";
 
+// Shared look for the compact, icon-only action buttons on the result view.
+// Append FOCUS_RING at the call site.
+const ICON_BTN =
+  "inline-flex items-center justify-center rounded-full p-3 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition text-[color:var(--ink-soft)] disabled:opacity-60";
+
 const VIEWPORT_PADDING = 48;
 const MIN_CANVAS_SIZE = 220;
 
@@ -331,8 +336,11 @@ function PersonFractal({
   // Keep the input in step when the committed text arrives from outside the
   // component — restored from the URL on load, or remembered across a
   // single/compare mode switch.
+  // Sync the field to committed text (URL restore, mode switch) and clear it
+  // when committed resets to null on Start over. Only runs when committed
+  // changes, so typing in the entry view is never clobbered.
   useEffect(() => {
-    if (committed !== null) setText(committed);
+    setText(committed ?? "");
   }, [committed]);
 
   function handleGenerate() {
@@ -356,6 +364,7 @@ function PersonFractal({
 
   return (
     <div className="flex flex-col items-center gap-4">
+      {!committed && (
       <div className="flex flex-wrap gap-3 items-center justify-center">
         <input
           value={text}
@@ -382,6 +391,7 @@ function PersonFractal({
           <DiceIcon className="w-5 h-5" />
         </button>
       </div>
+      )}
 
       {/* The reveal (played over the page) delivers the address as a moment;
           this persistent card sits above the shape as its reference copy. */}
@@ -505,18 +515,14 @@ function ShareLinkButton() {
   return (
     <button
       onClick={handleCopy}
-      className={`inline-flex items-center gap-2 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-[color:var(--ink-soft)] ${FOCUS_RING}`}
+      aria-label={copied ? "Link copied" : "Copy shareable link"}
+      title={copied ? "Link copied" : "Copy shareable link"}
+      className={`${ICON_BTN} ${FOCUS_RING}`}
     >
       {copied ? (
-        <>
-          <CheckIcon className="w-4 h-4 text-green-600" />
-          Link copied
-        </>
+        <CheckIcon className="w-5 h-5 text-green-600" />
       ) : (
-        <>
-          <LinkIcon className="w-4 h-4" />
-          Copy shareable link
-        </>
+        <LinkIcon className="w-5 h-5" />
       )}
     </button>
   );
@@ -546,10 +552,11 @@ function DownloadPngButton({
     <button
       onClick={handleDownload}
       disabled={busy}
-      className={`inline-flex items-center gap-2 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-[color:var(--ink-soft)] disabled:opacity-60 ${FOCUS_RING}`}
+      aria-label={busy ? "Rendering PNG" : "Download PNG"}
+      title={busy ? "Rendering…" : "Download PNG"}
+      className={`${ICON_BTN} ${FOCUS_RING} ${busy ? "animate-pulse" : ""}`}
     >
-      <DownloadIcon className="w-4 h-4" />
-      {busy ? "Rendering…" : "Download PNG"}
+      <DownloadIcon className="w-5 h-5" />
     </button>
   );
 }
@@ -614,18 +621,14 @@ function RecordClipButton({
     <button
       onClick={handleRecord}
       disabled={recording}
-      className={`inline-flex items-center gap-2 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition rounded-full px-5 py-3 text-sm font-medium text-[color:var(--ink-soft)] disabled:opacity-60 ${FOCUS_RING}`}
+      aria-label={recording ? "Recording clip" : "Record 3s clip"}
+      title={recording ? "Recording…" : "Record 3s clip"}
+      className={`${ICON_BTN} ${FOCUS_RING}`}
     >
       {recording ? (
-        <>
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" aria-hidden />
-          Recording…
-        </>
+        <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" aria-hidden />
       ) : (
-        <>
-          <VideoIcon className="w-4 h-4" />
-          Record 3s clip
-        </>
+        <VideoIcon className="w-5 h-5" />
       )}
     </button>
   );
@@ -653,6 +656,139 @@ function buildShareQuery(
 }
 
 const SOUND_STORAGE_KEY = "fractals-sound";
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+// One collapsed control for palette + sound, used in both the entry and result
+// views so theme never dominates the column but stays a tap away (recolor is
+// part of the share loop). `align` keeps the panel on-screen: centered under a
+// centered pill (entry), right-anchored under a right-aligned pill (result).
+function ThemePopover({
+  palette,
+  setPalette,
+  soundOn,
+  toggleSound,
+  align = "center",
+}: {
+  palette: PaletteId;
+  setPalette: (id: PaletteId) => void;
+  soundOn: boolean;
+  toggleSound: () => void;
+  align?: "center" | "end";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label="Theme and sound settings"
+        className={`inline-flex items-center gap-2 rounded-full pl-2 pr-3 py-2 text-sm bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING}`}
+      >
+        <span
+          style={{ backgroundImage: paletteGradient(PALETTES[palette]) }}
+          className="w-7 h-4 rounded-full border border-[color:var(--border)]"
+        />
+        <span className="text-[color:var(--ink)] font-medium">
+          {PALETTE_LABELS[palette]}
+        </span>
+        <ChevronDownIcon
+          className={`w-3.5 h-3.5 text-[color:var(--ink-soft)] transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div
+          className={`absolute z-40 mt-2 w-max max-w-[92vw] bg-[color:var(--surface)] backdrop-blur-xl border border-[color:var(--border)] rounded-2xl shadow-xl p-4 ${
+            align === "end" ? "right-0" : "left-1/2 -translate-x-1/2"
+          }`}
+        >
+          <div role="group" aria-label="Color palette" className="flex gap-3">
+            {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
+              <button
+                key={id}
+                onClick={() => setPalette(id)}
+                aria-pressed={palette === id}
+                aria-label={PALETTE_LABELS[id]}
+                className={`flex flex-col items-center gap-1 group rounded-lg p-1 active:scale-95 transition ${FOCUS_RING}`}
+              >
+                <span
+                  style={{ backgroundImage: paletteGradient(PALETTES[id]) }}
+                  className={`w-12 h-6 rounded-full border-2 transition ${
+                    palette === id
+                      ? "border-[color:var(--ink)]"
+                      : "border-transparent group-hover:border-[color:var(--ink-faint)]"
+                  }`}
+                />
+                <span
+                  className={`text-xs transition-colors ${
+                    palette === id
+                      ? "text-[color:var(--ink)] font-medium"
+                      : "text-[color:var(--ink-soft)]"
+                  }`}
+                >
+                  {PALETTE_LABELS[id]}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-[color:var(--border)]">
+            <button
+              onClick={toggleSound}
+              aria-pressed={soundOn}
+              className={`w-full inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm bg-[color:var(--surface)] border border-[color:var(--border)] hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING} ${
+                soundOn ? "text-[color:var(--ink)]" : "text-[color:var(--ink-faint)]"
+              }`}
+            >
+              {soundOn ? (
+                <SoundOnIcon className="w-5 h-5" />
+              ) : (
+                <SoundOffIcon className="w-5 h-5" />
+              )}
+              {soundOn ? "Sound on" : "Sound off"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("single");
@@ -758,10 +894,19 @@ export default function Home() {
     "--ring-offset": theme.ringOffset,
   } as React.CSSProperties;
 
+  // Return to the entry view for a fresh shape. Clearing committed text also
+  // empties the URL params (via the share-sync effect) so a copied link never
+  // points at a shape you've walked away from. Palette (a preference) stays.
+  function handleStartOver() {
+    setCommittedA(null);
+    setCommittedB(null);
+    setBlend(false);
+  }
+
   return (
     <main
       style={themeVars}
-      className="relative min-h-screen text-[color:var(--ink)] transition-colors duration-700 flex flex-col items-center gap-10 px-6 py-12 sm:py-16"
+      className="relative min-h-screen text-[color:var(--ink)] transition-colors duration-700 flex flex-col items-center gap-6 sm:gap-10 px-6 py-8 sm:py-16"
     >
       {/* One fixed layer per palette; gradients can't transition, so the
           world switch is an opacity cross-fade between prebuilt layers. */}
@@ -776,6 +921,26 @@ export default function Home() {
         />
       ))}
 
+      {/* Result view: slim top bar — small wordmark + the collapsed theme pill.
+          Entry view: full hero, mode toggle, theme pill. The shape below is a
+          fixed slot in both, so recoloring never remounts it. */}
+      {hasPattern && (
+        <div className="w-full max-w-xl flex items-center justify-between">
+          <span className="text-sm font-semibold tracking-tight text-[color:var(--ink)] transition-colors duration-700">
+            Fractals of You
+          </span>
+          <ThemePopover
+            palette={palette}
+            setPalette={setPalette}
+            soundOn={soundOn}
+            toggleSound={toggleSound}
+            align="end"
+          />
+        </div>
+      )}
+
+      {!hasPattern && (
+      <>
       <div className="text-center space-y-3 max-w-xl">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[color:var(--ink)] transition-colors duration-700">
           Fractals of You
@@ -786,6 +951,7 @@ export default function Home() {
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center justify-center gap-3">
       <div
         role="group"
         aria-label="Display mode"
@@ -817,53 +983,16 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-      <div
-        role="group"
-        aria-label="Color palette"
-        className="flex gap-4 items-start bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm rounded-2xl px-5 py-3 transition-colors duration-700"
-      >
-        {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
-          <button
-            key={id}
-            onClick={() => setPalette(id)}
-            aria-pressed={palette === id}
-            aria-label={PALETTE_LABELS[id]}
-            className={`flex flex-col items-center gap-1 group rounded-lg p-1 active:scale-95 transition ${FOCUS_RING}`}
-          >
-            <span
-              style={{ backgroundImage: paletteGradient(PALETTES[id]) }}
-              className={`w-12 h-6 rounded-full border-2 transition ${
-                palette === id
-                  ? "border-[color:var(--ink)]"
-                  : "border-transparent group-hover:border-[color:var(--ink-faint)]"
-              }`}
-            />
-            <span
-              className={`text-xs transition-colors duration-700 ${
-                palette === id
-                  ? "text-[color:var(--ink)] font-medium"
-                  : "text-[color:var(--ink-soft)]"
-              }`}
-            >
-              {PALETTE_LABELS[id]}
-            </span>
-          </button>
-        ))}
+      <ThemePopover
+        palette={palette}
+        setPalette={setPalette}
+        soundOn={soundOn}
+        toggleSound={toggleSound}
+        align="center"
+      />
       </div>
-      <button
-        onClick={toggleSound}
-        aria-pressed={soundOn}
-        aria-label={soundOn ? "Turn sound effects off" : "Turn sound effects on"}
-        title="Sound effects on bursts (off by default)"
-        className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition ${FOCUS_RING} ${
-          soundOn ? "text-[color:var(--ink)]" : "text-[color:var(--ink-faint)]"
-        }`}
-      >
-        {soundOn ? <SoundOnIcon className="w-5 h-5" /> : <SoundOffIcon className="w-5 h-5" />}
-        {soundOn ? "Sound on" : "Sound off"}
-      </button>
-      </div>
+      </>
+      )}
 
       {mode === "single" ? (
         <PersonFractal
@@ -937,18 +1066,23 @@ export default function Home() {
       )}
 
       {hasPattern && (
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <ShareLinkButton />
-          <DownloadPngButton palette={palette} items={wallpaperItems} />
-          <RecordClipButton canvasRef={recordCanvasRef} />
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2">
+            <ShareLinkButton />
+            <DownloadPngButton palette={palette} items={wallpaperItems} />
+            <RecordClipButton canvasRef={recordCanvasRef} />
+            <TipJar />
+          </div>
+          <button
+            onClick={handleStartOver}
+            className={`inline-flex items-center gap-1 text-xs text-[color:var(--ink-faint)] hover:text-[color:var(--ink-soft)] transition rounded-full px-2 py-1 ${FOCUS_RING}`}
+          >
+            &larr; Start over
+          </button>
         </div>
       )}
 
-      <div className="mt-auto flex justify-center">
-        <TipJar />
-      </div>
-
-      <footer className="text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
+      <footer className="mt-auto text-xs text-[color:var(--ink-faint)] transition-colors duration-700">
         Everything runs in your browser; nothing is sent anywhere.
       </footer>
 
