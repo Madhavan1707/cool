@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import ParticleCanvas from "@/components/ParticleCanvas";
 import ShapeCertificate from "@/components/ShapeCertificate";
 import RevealSequence from "@/components/RevealSequence";
@@ -23,6 +24,9 @@ import {
 } from "@/lib/particles";
 import { onThisDay } from "@/lib/onThisDay";
 import { playBurstChime, playEnableChime, type BurstKind } from "@/components/sound";
+
+// three.js only crosses the wire when someone actually steps into the world.
+const ShapeWorld = dynamic(() => import("@/components/ShapeWorld"), { ssr: false });
 
 type Mode = "single" | "compare";
 
@@ -165,6 +169,25 @@ function VideoIcon({ className }: { className?: string }) {
   );
 }
 
+function WorldIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3 3 8l9 5 9-5-9-5z" />
+      <path d="M3 8v8l9 5 9-5V8" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
 function CheckIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -191,6 +214,11 @@ const FOCUS_RING =
 // Append FOCUS_RING at the call site.
 const ICON_BTN =
   "inline-flex items-center justify-center rounded-full p-3 bg-[color:var(--surface)] backdrop-blur-sm border border-[color:var(--border)] shadow-sm hover:border-[color:var(--ink-faint)] active:scale-95 transition text-[color:var(--ink-soft)] disabled:opacity-60";
+
+// The primary accent pill used for result-view calls to action.
+// Append FOCUS_RING at the call site.
+const ACCENT_PILL =
+  "inline-flex items-center gap-1.5 bg-[color:var(--accent)] hover:bg-[color:var(--accent-hover)] active:scale-95 transition text-[color:var(--accent-ink)] rounded-full shadow-sm shadow-black/10 px-5 py-3 text-sm font-medium";
 
 const VIEWPORT_PADDING = 48;
 const MIN_CANVAS_SIZE = 220;
@@ -636,13 +664,14 @@ function RecordClipButton({
 
 const DEFAULT_PALETTE: PaletteId = "sunrise";
 
-/** Query-param names for shareable URLs: a/b = the two texts, m = mode, p = palette, v=blend. */
+/** Query-param names for shareable URLs: a/b = the two texts, m = mode, p = palette, v=blend, w=1 = inside the 3D world. */
 function buildShareQuery(
   mode: Mode,
   palette: PaletteId,
   committedA: string | null,
   committedB: string | null,
-  blend: boolean
+  blend: boolean,
+  world: boolean
 ): string {
   const params = new URLSearchParams();
   if (committedA) params.set("a", committedA);
@@ -652,6 +681,7 @@ function buildShareQuery(
     if (blend && committedA && committedB) params.set("v", "blend");
   }
   if (palette !== DEFAULT_PALETTE) params.set("p", palette);
+  if (world) params.set("w", "1");
   return params.toString();
 }
 
@@ -796,6 +826,7 @@ export default function Home() {
   const [committedA, setCommittedA] = useState<string | null>(null);
   const [committedB, setCommittedB] = useState<string | null>(null);
   const [blend, setBlend] = useState(false);
+  const [worldOpen, setWorldOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
   const urlSyncedOnceRef = useRef(false);
 
@@ -828,6 +859,9 @@ export default function Home() {
     if (b) setCommittedB(b.slice(0, 64));
     if (params.get("m") === "compare" || b) setMode("compare");
     if (params.get("v") === "blend") setBlend(true);
+    // A world link drops the visitor straight into the 3D space — the
+    // zero-explanation version of "open the link and see".
+    if (params.get("w") === "1" && (a || b)) setWorldOpen(true);
   }, []);
 
   // Sound preference lives in localStorage, deliberately not in share URLs —
@@ -856,30 +890,45 @@ export default function Home() {
       urlSyncedOnceRef.current = true;
       return;
     }
-    const query = buildShareQuery(mode, palette, committedA, committedB, blend);
+    const query = buildShareQuery(mode, palette, committedA, committedB, blend, worldOpen);
     window.history.replaceState(
       null,
       "",
       query ? `?${query}` : window.location.pathname
     );
-  }, [mode, palette, committedA, committedB, blend]);
+  }, [mode, palette, committedA, committedB, blend, worldOpen]);
 
   const hasPattern =
     mode === "single" ? committedA !== null : committedA !== null || committedB !== null;
+
+  // The blend's seed and caption, derived once so the wallpaper download and
+  // the 3D world can never drift apart.
+  const blendSeed = committedA && committedB ? `${committedA} ${committedB}` : null;
+  const blendCaption = committedA && committedB ? `${committedA} × ${committedB}` : null;
 
   // What the PNG download renders: one shape, two stacked, or the blend.
   const wallpaperItems: WallpaperItem[] = [];
   if (mode === "single") {
     if (committedA) wallpaperItems.push({ seed: committedA, caption: committedA });
-  } else if (blend && committedA && committedB) {
-    wallpaperItems.push({
-      seed: `${committedA} ${committedB}`,
-      caption: `${committedA} × ${committedB}`,
-    });
+  } else if (blend && blendSeed && blendCaption) {
+    wallpaperItems.push({ seed: blendSeed, caption: blendCaption });
   } else {
     if (committedA) wallpaperItems.push({ seed: committedA, caption: committedA });
     if (committedB) wallpaperItems.push({ seed: committedB, caption: committedB });
   }
+
+  // What the 3D world shows: the blend is one monument, compare is two side
+  // by side, single is yours alone.
+  const worldSeedA =
+    mode === "compare" && blend && blendSeed ? blendSeed : committedA ?? committedB;
+  const worldSeedB =
+    mode === "compare" && !blend && committedA && committedB ? committedB : null;
+  const worldLabel =
+    mode === "compare" && committedA && committedB
+      ? blend
+        ? blendCaption!
+        : `${committedA} & ${committedB}`
+      : (worldSeedA ?? "");
 
   const theme = WORLD_THEMES[palette];
   const themeVars = {
@@ -901,6 +950,7 @@ export default function Home() {
     setCommittedA(null);
     setCommittedB(null);
     setBlend(false);
+    setWorldOpen(false);
   }
 
   return (
@@ -1044,7 +1094,7 @@ export default function Home() {
           {committedA && committedB && (
             <button
               onClick={() => setBlend(!blend)}
-              className={`inline-flex items-center gap-1.5 bg-[color:var(--accent)] hover:bg-[color:var(--accent-hover)] active:scale-95 transition text-[color:var(--accent-ink)] rounded-full shadow-sm shadow-black/10 px-5 py-3 text-sm font-medium ${FOCUS_RING}`}
+              className={`${ACCENT_PILL} ${FOCUS_RING}`}
             >
               {blend ? (
                 <>
@@ -1067,6 +1117,13 @@ export default function Home() {
 
       {hasPattern && (
         <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={() => setWorldOpen(true)}
+            className={`${ACCENT_PILL} ${FOCUS_RING}`}
+          >
+            <WorldIcon className="w-4 h-4" />
+            Step into its world
+          </button>
           <div className="flex items-center gap-2">
             <ShareLinkButton />
             <DownloadPngButton palette={palette} items={wallpaperItems} />
@@ -1092,6 +1149,21 @@ export default function Home() {
           seed={reveal.seed}
           palette={palette}
           onDone={() => setReveal(null)}
+        />
+      )}
+
+      {worldOpen && worldSeedA && (
+        <ShapeWorld
+          seedA={worldSeedA}
+          seedB={worldSeedB}
+          palette={palette}
+          label={worldLabel}
+          onClose={() => setWorldOpen(false)}
+          onBurst={
+            soundOn
+              ? (kind: BurstKind) => playBurstChime(kind, hashUnit(worldSeedA, "pitch"))
+              : undefined
+          }
         />
       )}
     </main>
